@@ -1,0 +1,643 @@
+"use client";
+
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { motion, useScroll, useTransform } from "framer-motion";
+import {
+  ArrowRight,
+  BadgeIndianRupee,
+  Boxes,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ImagePlus,
+  LockKeyhole,
+  MapPin,
+  Menu,
+  Minus,
+  NotebookPen,
+  Plus,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Upload,
+  UserRound,
+  X,
+} from "lucide-react";
+import type { Product } from "@/lib/types";
+
+type CartItem = Product & { quantity: number };
+const CART_STORAGE_KEY = "notekart:guest-cart";
+const CART_CHANGE_EVENT = "notekart:cart-change";
+const EMPTY_CART: CartItem[] = [];
+let cachedCartRaw = "";
+let cachedCartSnapshot: CartItem[] = EMPTY_CART;
+
+function readStoredCartSnapshot(): CartItem[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const stored = window.localStorage.getItem(CART_STORAGE_KEY) ?? "";
+    if (stored === cachedCartRaw) return cachedCartSnapshot;
+    cachedCartRaw = stored;
+
+    if (!stored) {
+      cachedCartSnapshot = EMPTY_CART;
+      return cachedCartSnapshot;
+    }
+
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      cachedCartSnapshot = EMPTY_CART;
+      return cachedCartSnapshot;
+    }
+
+    cachedCartSnapshot = parsed.filter(
+      (item): item is CartItem =>
+        typeof item?.id === "string" &&
+        typeof item?.name === "string" &&
+        typeof item?.price === "number" &&
+        typeof item?.quantity === "number" &&
+        item.quantity > 0,
+    );
+    return cachedCartSnapshot;
+  } catch {
+    cachedCartSnapshot = EMPTY_CART;
+    return cachedCartSnapshot;
+  }
+}
+
+function persistCart(cart: CartItem[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  window.dispatchEvent(new Event(CART_CHANGE_EVENT));
+}
+
+function subscribeCart(onStoreChange: () => void) {
+  window.addEventListener(CART_CHANGE_EVENT, onStoreChange);
+  window.addEventListener("storage", onStoreChange);
+  return () => {
+    window.removeEventListener(CART_CHANGE_EVENT, onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
+}
+
+function getServerCartSnapshot() {
+  return EMPTY_CART;
+}
+
+function QuantityStepper({
+  label,
+  quantity,
+  onDecrease,
+  onIncrease,
+}: {
+  label: string;
+  quantity: number;
+  onDecrease: () => void;
+  onIncrease: () => void;
+}) {
+  return (
+    <div className="quantity-control" aria-label={label}>
+      <button type="button" onClick={onDecrease} aria-label="Decrease quantity">
+        <Minus size={15} />
+      </button>
+      <span>{quantity}</span>
+      <button type="button" onClick={onIncrease} aria-label="Increase quantity">
+        <Plus size={15} />
+      </button>
+    </div>
+  );
+}
+
+export function Storefront({ products }: { products: Product[] }) {
+  const [cartOpen, setCartOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const cart = useSyncExternalStore(subscribeCart, readStoredCartSnapshot, getServerCartSnapshot);
+  const [selected, setSelected] = useState<Product>(products[0]);
+  const [imageIndex, setImageIndex] = useState(0);
+  const [mobile, setMobile] = useState("");
+  const [otp, setOtp] = useState("");
+  const [user, setUser] = useState<{ mobile: string; role: string } | null>(null);
+  const [authMessage, setAuthMessage] = useState("");
+  const [customFileUrl, setCustomFileUrl] = useState("");
+  const [customStatus, setCustomStatus] = useState("");
+  const [checkoutMessage, setCheckoutMessage] = useState("");
+  const { scrollYProgress } = useScroll();
+  const heroLift = useTransform(scrollYProgress, [0, 0.35], [0, -90]);
+  const heroTilt = useTransform(scrollYProgress, [0, 0.35], [0, -7]);
+  const stackDrift = useTransform(scrollYProgress, [0, 0.35], [0, 56]);
+  const accentDrift = useTransform(scrollYProgress, [0, 0.35], [0, -140]);
+  const paperDrift = useTransform(scrollYProgress, [0, 0.35], [0, 120]);
+  const paperDriftSlow = useTransform(scrollYProgress, [0, 0.35], [0, 52]);
+
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(products.map((product) => product.category)))],
+    [products],
+  );
+
+  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  function getCartQuantity(productId: string) {
+    return cart.find((item) => item.id === productId)?.quantity ?? 0;
+  }
+
+  function addToCart(product: Product, openCart = false) {
+    const current = readStoredCartSnapshot();
+    const existing = current.find((item) => item.id === product.id);
+    const next = existing
+      ? current.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item))
+      : [...current, { ...product, quantity: 1 }];
+    persistCart(next);
+    if (openCart) setCartOpen(true);
+  }
+
+  function updateQuantity(id: string, delta: number) {
+    const current = readStoredCartSnapshot();
+    const next = current
+      .map((item) => (item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item))
+      .filter((item) => item.quantity > 0);
+    persistCart(next);
+  }
+
+  function continueShopping() {
+    setCartOpen(false);
+    document.getElementById("products")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function login() {
+    setAuthMessage("");
+    const response = await fetch("/api/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mobile, otp }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setAuthMessage(data.error ?? "Login failed.");
+      return;
+    }
+    setUser(data.user);
+    setAuthMessage(data.user.role === "admin" ? "Admin access unlocked." : "You are logged in.");
+  }
+
+  async function uploadCustomFile(file: File) {
+    setCustomStatus("Uploading artwork...");
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch("/api/uploads", { method: "POST", body: formData });
+    const data = await response.json();
+    if (!response.ok) {
+      setCustomStatus(data.error ?? "Upload failed.");
+      return;
+    }
+    setCustomFileUrl(data.url);
+    setCustomStatus("Artwork uploaded. Send the request below.");
+  }
+
+  async function submitCustomRequest(formData: FormData) {
+    setCustomStatus("Sending request...");
+    const response = await fetch("/api/custom-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerName: formData.get("customerName"),
+        mobile: formData.get("mobile"),
+        quantity: Number(formData.get("quantity") || 1),
+        notes: formData.get("notes"),
+        imageUrl: customFileUrl,
+      }),
+    });
+    setCustomStatus(response.ok ? "Request received. NoteKart will call you with a design proof." : "Could not send request.");
+  }
+
+  async function checkout() {
+    if (!cart.length) return;
+    setCheckoutMessage("Creating Razorpay order...");
+    const paymentResponse = await fetch("/api/payments/razorpay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: total }),
+    });
+    const payment = await paymentResponse.json();
+    const orderId = payment.order?.id;
+    await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerName: user?.mobile ? `Customer ${user.mobile}` : "Guest customer",
+        mobile: user?.mobile ?? mobile,
+        address: "Doomra / local delivery confirmation pending",
+        items: cart.map((item) => ({ productId: item.id, name: item.name, quantity: item.quantity, price: item.price })),
+        amount: total,
+        razorpayOrderId: orderId,
+      }),
+    });
+    setCheckoutMessage(payment.mock ? `Demo order ${orderId} created. Add Razorpay keys to enable live checkout.` : "Razorpay order created.");
+  }
+
+  return (
+    <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-black/10 bg-[rgba(250,247,238,0.82)] backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-8">
+          <a href="#" className="flex items-center gap-3 font-semibold">
+            <span className="grid size-10 place-items-center rounded-lg bg-[var(--ink)] text-[var(--paper)]">
+              <NotebookPen size={21} />
+            </span>
+            <span className="text-lg tracking-tight">NoteKart</span>
+          </a>
+          <nav className="hidden items-center gap-8 text-sm font-medium text-black/70 md:flex">
+            <a href="#products">Products</a>
+            <a href="#custom">Customize</a>
+            <a href="#craft">Craft</a>
+            <a href="/admin">Admin</a>
+          </nav>
+          <div className="flex items-center gap-2">
+            <button className="icon-button hidden md:grid" aria-label="Search">
+              <Search size={18} />
+            </button>
+            <button className="icon-button" aria-label="Account" onClick={() => setAuthOpen(true)}>
+              <UserRound size={18} />
+            </button>
+            <button className="cart-button" onClick={() => setCartOpen(true)}>
+              <ShoppingBag size={18} />
+              <span>{cartCount}</span>
+            </button>
+            <button className="icon-button md:hidden" aria-label="Menu" onClick={() => setMobileNavOpen(true)}>
+              <Menu size={18} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="hero-section relative overflow-hidden px-4 pb-16 pt-28 md:px-8 md:pb-24 md:pt-32">
+        <motion.div style={{ y: paperDrift }} className="paper-sheet paper-sheet-left left-[4%] top-28 rotate-[-10deg]" />
+        <motion.div style={{ y: paperDriftSlow }} className="paper-sheet paper-sheet-mid left-[43%] top-24 hidden rotate-[5deg] md:block" />
+        <motion.div style={{ y: accentDrift }} className="hero-pencil hidden md:block" />
+        <motion.div style={{ y: heroLift }} className="paper-sheet paper-sheet-right right-[8%] top-36 hidden rotate-[12deg] md:block" />
+        <div className="mx-auto grid max-w-7xl items-center gap-10 md:grid-cols-[0.95fr_1.05fr]">
+          <div className="relative z-10">
+            <p className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--teal)]">
+              <MapPin size={16} /> Ward no. 11, Doomra, Nawalgarh
+            </p>
+            <h1 className="max-w-3xl text-5xl font-semibold leading-[0.95] tracking-tight md:text-7xl">
+              Notebooks made for real notes, real classes, real memories.
+            </h1>
+            <p className="mt-6 max-w-xl text-base leading-7 text-black/68 md:text-lg">
+              Premium school, coaching, office and customized notebooks manufactured by NoteKart in Doomra, Jhunjhunu.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a className="primary-button" href="#products">
+                Shop notebooks <ArrowRight size={18} />
+              </a>
+              <a className="secondary-button" href="#custom">
+                Customize cover <Sparkles size={18} />
+              </a>
+            </div>
+            <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
+              {[
+                ["80 GSM", "smooth paper"],
+                ["1 pc", "custom MOQ"],
+                ["Local", "Doomra unit"],
+              ].map(([value, label]) => (
+                <div className="metric" key={value}>
+                  <strong>{value}</strong>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <motion.div style={{ y: heroLift, rotateX: heroTilt }} className="hero-stage">
+            <motion.div style={{ y: stackDrift }} className="hero-depth-grid" />
+            <motion.div style={{ y: accentDrift }} className="hero-orbit hero-orbit-one" />
+            <motion.div style={{ y: paperDriftSlow }} className="hero-orbit hero-orbit-two" />
+            <motion.div style={{ y: stackDrift }} className="notebook-stack">
+              <div className="book book-one">
+                <span>NOTEKART</span>
+                <strong>Custom Photo Journal</strong>
+              </div>
+              <div className="book book-two">
+                <span>Classmate Series</span>
+                <strong>192 Pages</strong>
+              </div>
+              <div className="book book-three">
+                <span>Doomra Made</span>
+                <strong>A5 Hardbound</strong>
+              </div>
+            </motion.div>
+            <motion.div style={{ y: paperDriftSlow }} className="cover-swatch cover-swatch-one" />
+            <motion.div style={{ y: accentDrift }} className="cover-swatch cover-swatch-two" />
+            <div className="ruler-rail" />
+            <div className="floating-card top-8 right-0">
+              <BadgeIndianRupee size={18} />
+              Razorpay ready
+            </div>
+            <div className="floating-card bottom-8 left-0">
+              <Boxes size={18} />
+              Shiprocket tracking
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="border-y border-black/10 bg-white/62 px-4 py-4 md:px-8">
+        <div className="mx-auto flex max-w-7xl gap-3 overflow-x-auto">
+          {categories.map((category) => (
+            <button className="category-chip" key={category}>
+              {category}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section id="products" className="px-4 py-16 md:px-8 md:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="section-heading">
+            <h2>Notebook portfolio</h2>
+            <p>Pane through images, zoom into the product texture, and add production-ready notebooks to cart.</p>
+          </div>
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {products.map((product) => (
+              <article
+                className="product-card"
+                key={product.id}
+                onMouseEnter={() => {
+                  setSelected(product);
+                  setImageIndex(0);
+                }}
+              >
+                <button className="product-media" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>
+                  <img src={product.images[0]} alt={product.name} />
+                </button>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-[var(--teal)]">{product.category}</p>
+                    <h3>{product.name}</h3>
+                  </div>
+                  <strong>₹{product.price}</strong>
+                </div>
+                <p>{product.description}</p>
+                {getCartQuantity(product.id) > 0 ? (
+                  <QuantityStepper
+                    label={`${product.name} quantity`}
+                    quantity={getCartQuantity(product.id)}
+                    onDecrease={() => updateQuantity(product.id, -1)}
+                    onIncrease={() => addToCart(product)}
+                  />
+                ) : (
+                  <button className="product-action" onClick={() => addToCart(product)}>
+                    Add to cart <Plus size={17} />
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+
+          <div className="mt-8 grid gap-6 rounded-lg border border-black/10 bg-white/72 p-4 shadow-[0_28px_90px_rgba(24,20,14,0.08)] md:grid-cols-[1.1fr_0.9fr] md:p-6">
+            <div className="zoom-frame">
+              <img src={selected.images[imageIndex] ?? selected.images[0]} alt={selected.name} />
+              <button className="image-nav left-3" onClick={() => setImageIndex((imageIndex + selected.images.length - 1) % selected.images.length)}>
+                <ChevronLeft size={18} />
+              </button>
+              <button className="image-nav right-3" onClick={() => setImageIndex((imageIndex + 1) % selected.images.length)}>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+            <div className="product-detail">
+              <p className="text-sm font-semibold text-[var(--saffron)]">{selected.category}</p>
+              <h3>{selected.name}</h3>
+              <p>{selected.description}</p>
+              <div className="spec-grid">
+                {Object.entries(selected.specs).map(([key, value]) => (
+                  <div key={key}>
+                    <span>{key}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+              {getCartQuantity(selected.id) > 0 ? (
+                <div className="detail-cart-row">
+                  <QuantityStepper
+                    label={`${selected.name} quantity`}
+                    quantity={getCartQuantity(selected.id)}
+                    onDecrease={() => updateQuantity(selected.id, -1)}
+                    onIncrease={() => addToCart(selected)}
+                  />
+                  <button className="secondary-button justify-center" onClick={() => setCartOpen(true)}>
+                    Continue to cart <ShoppingBag size={18} />
+                  </button>
+                </div>
+              ) : (
+                <button className="primary-button w-full justify-center" onClick={() => addToCart(selected)}>
+                  Add selected notebook <ShoppingBag size={18} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="custom" className="custom-band px-4 py-16 md:px-8 md:py-24">
+        <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[0.95fr_1.05fr]">
+          <div>
+            <h2>Upload a photo. We turn it into a notebook cover.</h2>
+            <p>
+              Great for birthdays, coaching batches, school prizes, creators, businesses, wedding gifts and personal journals.
+            </p>
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              {["Photo covers", "Logo notebooks", "Batch sets", "Matte/gloss finish"].map((item) => (
+                <div className="check-row" key={item}>
+                  <Check size={17} /> {item}
+                </div>
+              ))}
+            </div>
+          </div>
+          <form action={submitCustomRequest} className="custom-form">
+            <div className={`upload-zone ${customFileUrl ? "has-preview" : ""}`}>
+              <input
+                id="custom-artwork-upload"
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) uploadCustomFile(file);
+                }}
+              />
+              {customFileUrl ? (
+                <>
+                  <img className="upload-preview" src={customFileUrl} alt="Uploaded custom notebook artwork preview" />
+                  <div className="upload-preview-overlay">
+                    <Check size={18} />
+                    <span>Artwork uploaded</span>
+                  </div>
+                  <button
+                    className="upload-remove"
+                    type="button"
+                    onClick={() => {
+                      setCustomFileUrl("");
+                      setCustomStatus("Artwork removed. Upload a new cover photo or logo.");
+                    }}
+                  >
+                    Remove
+                  </button>
+                </>
+              ) : (
+                <label className="upload-prompt" htmlFor="custom-artwork-upload">
+                  <ImagePlus size={30} />
+                  <span>Upload cover photo or logo</span>
+                  <small>PNG, JPG or WebP</small>
+                </label>
+              )}
+              {customFileUrl ? (
+                <label className="upload-replace" htmlFor="custom-artwork-upload">
+                  Replace artwork
+                </label>
+              ) : null}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input name="customerName" placeholder="Your name" required />
+              <input name="mobile" placeholder="Mobile number" required />
+            </div>
+            <input name="quantity" type="number" min="1" defaultValue="1" placeholder="Quantity" />
+            <textarea name="notes" placeholder="Cover idea, notebook size, paper type, delivery details" rows={4} />
+            <button className="primary-button justify-center" type="submit">
+              Send custom request <Upload size={18} />
+            </button>
+            {customStatus ? <p className="form-status">{customStatus}</p> : null}
+          </form>
+        </div>
+      </section>
+
+      <section id="craft" className="px-4 py-16 md:px-8 md:py-24">
+        <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-3">
+          {[
+            ["Design proof", "Custom covers are checked for crop, brightness and print fit before production."],
+            ["Manufacturing", "Notebook sizes, ruling, page count and binding can be managed from admin."],
+            ["Delivery", "Orders can be tracked using Shiprocket AWB inside the admin panel."],
+          ].map(([title, body]) => (
+            <div className="process-panel" key={title}>
+              <span />
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <footer className="border-t border-black/10 px-4 py-10 md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-black/62 md:flex-row md:items-center md:justify-between">
+          <strong className="text-[var(--ink)]">NoteKart, Ward no. 11, Doomra, Nawalgarh, Jhunjhunu</strong>
+          <span>Notebooks, custom covers, school and business stationery.</span>
+        </div>
+      </footer>
+
+      {cartCount > 0 ? (
+        <div className="sticky-cart-bar">
+          <div>
+            <strong>{cartCount} item{cartCount === 1 ? "" : "s"} in cart</strong>
+            <span>₹{total} total</span>
+          </div>
+          <button className="secondary-button" onClick={continueShopping}>
+            Continue shopping
+          </button>
+          <button className="primary-button" onClick={() => setCartOpen(true)}>
+            Continue to cart <ShoppingBag size={18} />
+          </button>
+        </div>
+      ) : null}
+
+      {cartOpen ? (
+        <aside className="drawer">
+          <button className="drawer-backdrop" onClick={() => setCartOpen(false)} aria-label="Close cart" />
+          <div className="drawer-panel">
+            <div className="drawer-head">
+              <h2>Cart</h2>
+              <button className="icon-button" onClick={() => setCartOpen(false)}><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              {cart.length ? (
+                cart.map((item) => (
+                  <div className="cart-row" key={item.id}>
+                    <img src={item.images[0]} alt={item.name} />
+                    <div>
+                      <strong>{item.name}</strong>
+                      <span>₹{item.price} each</span>
+                    </div>
+                    <QuantityStepper
+                      label={`${item.name} cart quantity`}
+                      quantity={item.quantity}
+                      onDecrease={() => updateQuantity(item.id, -1)}
+                      onIncrease={() => updateQuantity(item.id, 1)}
+                    />
+                  </div>
+                ))
+              ) : (
+                <div className="empty-cart">
+                  <ShoppingBag size={28} />
+                  <strong>Your cart is empty</strong>
+                  <span>Add notebooks or customized covers to continue.</span>
+                </div>
+              )}
+            </div>
+            <div className="mt-auto border-t border-black/10 pt-5">
+              <div className="mb-4 flex justify-between text-lg font-semibold">
+                <span>Total</span>
+                <span>₹{total}</span>
+              </div>
+              <div className="cart-actions">
+                <button className="secondary-button justify-center" onClick={continueShopping}>
+                  Continue shopping
+                </button>
+                <button className="primary-button justify-center" onClick={checkout} disabled={!cart.length}>
+                  Continue to checkout <ArrowRight size={18} />
+                </button>
+              </div>
+              {checkoutMessage ? <p className="form-status">{checkoutMessage}</p> : null}
+            </div>
+          </div>
+        </aside>
+      ) : null}
+
+      {authOpen ? (
+        <aside className="drawer">
+          <button className="drawer-backdrop" onClick={() => setAuthOpen(false)} aria-label="Close login" />
+          <div className="drawer-panel">
+            <div className="drawer-head">
+              <h2>Login</h2>
+              <button className="icon-button" onClick={() => setAuthOpen(false)}><X size={18} /></button>
+            </div>
+            <div className="login-card">
+              <LockKeyhole size={28} />
+              <h3>Mobile OTP access</h3>
+              <p>Use any mobile number. OTP must be 0000, 1111, 2222 and so on.</p>
+              <input value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="Mobile number" />
+              <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="Four digit OTP" maxLength={4} />
+              <button className="primary-button justify-center" onClick={login}>Verify OTP</button>
+              {authMessage ? <p className="form-status">{authMessage}</p> : null}
+              {user?.role === "admin" ? <a className="secondary-button justify-center" href="/admin">Open admin panel</a> : null}
+            </div>
+          </div>
+        </aside>
+      ) : null}
+
+      {mobileNavOpen ? (
+        <aside className="drawer">
+          <button className="drawer-backdrop" onClick={() => setMobileNavOpen(false)} aria-label="Close menu" />
+          <div className="drawer-panel max-w-xs">
+            <div className="drawer-head">
+              <h2>Menu</h2>
+              <button className="icon-button" onClick={() => setMobileNavOpen(false)}><X size={18} /></button>
+            </div>
+            {["Products", "Customize", "Craft", "Admin"].map((label) => (
+              <a className="mobile-link" href={label === "Admin" ? "/admin" : `#${label.toLowerCase()}`} key={label}>
+                {label}
+              </a>
+            ))}
+          </div>
+        </aside>
+      ) : null}
+    </main>
+  );
+}
