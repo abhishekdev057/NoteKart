@@ -122,6 +122,7 @@ export function Storefront({ products }: { products: Product[] }) {
   const [authMessage, setAuthMessage] = useState("");
   const [customFileUrl, setCustomFileUrl] = useState("");
   const [customStatus, setCustomStatus] = useState("");
+  const [customSubmitted, setCustomSubmitted] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const { scrollYProgress } = useScroll();
   const heroLift = useTransform(scrollYProgress, [0, 0.35], [0, -90]);
@@ -183,6 +184,7 @@ export function Storefront({ products }: { products: Product[] }) {
   }
 
   async function uploadCustomFile(file: File) {
+    setCustomSubmitted(false);
     setCustomStatus("Uploading artwork...");
     const formData = new FormData();
     formData.append("file", file);
@@ -209,7 +211,14 @@ export function Storefront({ products }: { products: Product[] }) {
         imageUrl: customFileUrl,
       }),
     });
-    setCustomStatus(response.ok ? "Request received. NoteKart will call you with a design proof." : "Could not send request.");
+    if (!response.ok) {
+      setCustomStatus("Could not send request.");
+      return;
+    }
+
+    setCustomFileUrl("");
+    setCustomSubmitted(true);
+    setCustomStatus("");
   }
 
   async function checkout() {
@@ -454,59 +463,79 @@ export function Storefront({ products }: { products: Product[] }) {
               ))}
             </div>
           </div>
-          <form action={submitCustomRequest} className="custom-form">
-            <div className={`upload-zone ${customFileUrl ? "has-preview" : ""}`}>
-              <input
-                id="custom-artwork-upload"
-                type="file"
-                accept="image/*"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) uploadCustomFile(file);
+          {customSubmitted ? (
+            <div className="custom-success">
+              <div className="custom-success-icon">
+                <Check size={30} />
+              </div>
+              <h3>Request received</h3>
+              <p>NoteKart will call you with a design proof and confirm notebook size, paper type, quantity, and delivery.</p>
+              <button
+                className="primary-button justify-center"
+                type="button"
+                onClick={() => {
+                  setCustomSubmitted(false);
+                  setCustomStatus("");
                 }}
-              />
-              {customFileUrl ? (
-                <>
-                  <img className="upload-preview" src={customFileUrl} alt="Uploaded custom notebook artwork preview" />
-                  <div className="upload-preview-overlay">
-                    <Check size={18} />
-                    <span>Artwork uploaded</span>
-                  </div>
-                  <button
-                    className="upload-remove"
-                    type="button"
-                    onClick={() => {
-                      setCustomFileUrl("");
-                      setCustomStatus("Artwork removed. Upload a new cover photo or logo.");
-                    }}
-                  >
-                    Remove
-                  </button>
-                </>
-              ) : (
-                <label className="upload-prompt" htmlFor="custom-artwork-upload">
-                  <ImagePlus size={30} />
-                  <span>Upload cover photo or logo</span>
-                  <small>PNG, JPG or WebP</small>
-                </label>
-              )}
-              {customFileUrl ? (
-                <label className="upload-replace" htmlFor="custom-artwork-upload">
-                  Replace artwork
-                </label>
-              ) : null}
+              >
+                Create another request <Plus size={18} />
+              </button>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input name="customerName" placeholder="Your name" required />
-              <input name="mobile" placeholder="Mobile number" required />
-            </div>
-            <input name="quantity" type="number" min="1" defaultValue="1" placeholder="Quantity" />
-            <textarea name="notes" placeholder="Cover idea, notebook size, paper type, delivery details" rows={4} />
-            <button className="primary-button justify-center" type="submit">
-              Send custom request <Upload size={18} />
-            </button>
-            {customStatus ? <p className="form-status">{customStatus}</p> : null}
-          </form>
+          ) : (
+            <form action={submitCustomRequest} className="custom-form">
+              <div className={`upload-zone ${customFileUrl ? "has-preview" : ""}`}>
+                <input
+                  id="custom-artwork-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) uploadCustomFile(file);
+                  }}
+                />
+                {customFileUrl ? (
+                  <>
+                    <img className="upload-preview" src={customFileUrl} alt="Uploaded custom notebook artwork preview" />
+                    <div className="upload-preview-overlay">
+                      <Check size={18} />
+                      <span>Artwork uploaded</span>
+                    </div>
+                    <button
+                      className="upload-remove"
+                      type="button"
+                      onClick={() => {
+                        setCustomFileUrl("");
+                        setCustomStatus("Artwork removed. Upload a new cover photo or logo.");
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </>
+                ) : (
+                  <label className="upload-prompt" htmlFor="custom-artwork-upload">
+                    <ImagePlus size={30} />
+                    <span>Upload cover photo or logo</span>
+                    <small>PNG, JPG or WebP</small>
+                  </label>
+                )}
+                {customFileUrl ? (
+                  <label className="upload-replace" htmlFor="custom-artwork-upload">
+                    Replace artwork
+                  </label>
+                ) : null}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input name="customerName" placeholder="Your name" required />
+                <input name="mobile" placeholder="Mobile number" required />
+              </div>
+              <input name="quantity" type="number" min="1" defaultValue="1" placeholder="Quantity" />
+              <textarea name="notes" placeholder="Cover idea, notebook size, paper type, delivery details" rows={4} />
+              <button className="primary-button justify-center" type="submit">
+                Send custom request <Upload size={18} />
+              </button>
+              {customStatus ? <p className="form-status">{customStatus}</p> : null}
+            </form>
+          )}
         </div>
       </section>
 
