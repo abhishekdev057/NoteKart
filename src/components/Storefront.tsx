@@ -348,7 +348,7 @@ export function Storefront({ products }: { products: Product[] }) {
             </div>
             <div className="floating-card bottom-8 left-0">
               <Boxes size={18} />
-              Shiprocket tracking
+              Delhivery ready
             </div>
           </motion.div>
         </div>

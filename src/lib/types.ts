@@ -25,6 +25,8 @@ export type CustomRequest = {
   createdAt?: string;
 };
 
+export type DeliveryProvider = "review" | "delhivery" | "post_office" | "manual";
+
 export type Order = {
   id: string;
   customerName: string;
@@ -35,6 +37,9 @@ export type Order = {
   paymentStatus: string;
   deliveryStatus: string;
   shiprocketAwb?: string | null;
+  deliveryProvider?: DeliveryProvider | null;
+  deliveryTrackingNumber?: string | null;
+  deliveryNotes?: string | null;
   phonepePaymentId?: string | null;
   createdAt?: string;
 };

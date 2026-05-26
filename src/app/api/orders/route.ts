@@ -19,6 +19,9 @@ export async function POST(request: Request) {
       items: Array.isArray(body.items) ? body.items : [],
       amount: Number(body.amount ?? 0),
       shiprocketAwb: body.shiprocketAwb ? String(body.shiprocketAwb) : null,
+      deliveryProvider: body.deliveryProvider ? body.deliveryProvider : "review",
+      deliveryTrackingNumber: body.deliveryTrackingNumber ? String(body.deliveryTrackingNumber) : null,
+      deliveryNotes: body.deliveryNotes ? String(body.deliveryNotes) : null,
       phonepePaymentId: body.phonepePaymentId ? String(body.phonepePaymentId) : null,
     });
 

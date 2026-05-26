@@ -10,8 +10,8 @@ Next.js storefront and admin console for NoteKart, a notebook and customized not
 - Customized notebook request flow with artwork upload
 - Mobile OTP login demo
 - Admin access for configured mobile numbers
-- Admin product, category, media, order, analytics, PhonePe, and Shiprocket surfaces
-- Neon Postgres, Cloudinary, PhonePe, and Shiprocket-ready API routes
+- Dedicated admin pages for products, custom requests, orders, delivery review, and reports
+- Neon Postgres, Cloudinary, PhonePe, and Delhivery-ready API routes
 - Public policy pages for payment gateway website verification
 
 ## Development
@@ -39,8 +39,8 @@ PHONEPE_CLIENT_ID=
 PHONEPE_CLIENT_SECRET=
 PHONEPE_CLIENT_VERSION=
 NEXT_PUBLIC_SITE_URL=
-SHIPROCKET_EMAIL=
-SHIPROCKET_PASSWORD=
+DELHIVERY_ENV=
+DELHIVERY_API_TOKEN=
 ```
 
 OTP accepts four repeated digits for now, such as `0000`, `1111`, or `2222`.

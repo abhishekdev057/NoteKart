@@ -114,12 +114,18 @@ async function ensureSchema() {
       payment_status TEXT NOT NULL DEFAULT 'pending',
       delivery_status TEXT NOT NULL DEFAULT 'draft',
       shiprocket_awb TEXT,
+      delivery_provider TEXT NOT NULL DEFAULT 'review',
+      delivery_tracking_number TEXT,
+      delivery_notes TEXT,
       phonepe_payment_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
 
   await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS phonepe_payment_id TEXT`;
+  await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_provider TEXT NOT NULL DEFAULT 'review'`;
+  await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_tracking_number TEXT`;
+  await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_notes TEXT`;
 
   const count = (await sql`SELECT COUNT(*)::int AS count FROM products`) as DbRow[];
   if (Number(count[0]?.count ?? 0) === 0) {
@@ -222,8 +228,15 @@ export async function createOrder(order: Omit<Order, "id" | "paymentStatus" | "d
   await readyDb();
   const id = crypto.randomUUID();
   await getSql()`
-    INSERT INTO orders (id, customer_name, mobile, address, items, amount, shiprocket_awb, phonepe_payment_id)
-    VALUES (${id}, ${order.customerName}, ${order.mobile}, ${order.address}, ${JSON.stringify(order.items)}::jsonb, ${order.amount}, ${order.shiprocketAwb ?? null}, ${order.phonepePaymentId ?? null})
+    INSERT INTO orders (
+      id, customer_name, mobile, address, items, amount, shiprocket_awb,
+      delivery_provider, delivery_tracking_number, delivery_notes, phonepe_payment_id
+    )
+    VALUES (
+      ${id}, ${order.customerName}, ${order.mobile}, ${order.address}, ${JSON.stringify(order.items)}::jsonb,
+      ${order.amount}, ${order.shiprocketAwb ?? null}, ${order.deliveryProvider ?? "review"},
+      ${order.deliveryTrackingNumber ?? null}, ${order.deliveryNotes ?? null}, ${order.phonepePaymentId ?? null}
+    )
   `;
   return id;
 }
@@ -241,9 +254,28 @@ export async function listOrders() {
     paymentStatus: String(row.payment_status),
     deliveryStatus: String(row.delivery_status),
     shiprocketAwb: row.shiprocket_awb ? String(row.shiprocket_awb) : null,
+    deliveryProvider: row.delivery_provider ? (String(row.delivery_provider) as Order["deliveryProvider"]) : "review",
+    deliveryTrackingNumber: row.delivery_tracking_number ? String(row.delivery_tracking_number) : null,
+    deliveryNotes: row.delivery_notes ? String(row.delivery_notes) : null,
     phonepePaymentId: row.phonepe_payment_id ? String(row.phonepe_payment_id) : null,
     createdAt: row.created_at ? String(row.created_at) : undefined,
   })) satisfies Order[];
+}
+
+export async function updateOrderDelivery(
+  id: string,
+  delivery: Pick<Order, "deliveryProvider" | "deliveryTrackingNumber" | "deliveryStatus" | "deliveryNotes">,
+) {
+  await readyDb();
+  await getSql()`
+    UPDATE orders
+    SET
+      delivery_provider = ${delivery.deliveryProvider ?? "review"},
+      delivery_tracking_number = ${delivery.deliveryTrackingNumber ?? null},
+      delivery_status = ${delivery.deliveryStatus ?? "review"},
+      delivery_notes = ${delivery.deliveryNotes ?? null}
+    WHERE id = ${id}
+  `;
 }
 
 export async function updateOrderPaymentStatusByPhonePe(phonepePaymentId: string, paymentStatus: string) {
