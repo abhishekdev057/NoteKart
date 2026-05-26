@@ -1099,6 +1099,58 @@ img {
   font-weight: 750;
 }
 
+.payment-status-page {
+  display: grid;
+  place-items: center;
+}
+
+.payment-status-card {
+  position: relative;
+}
+
+.payment-status-icon {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  margin-top: 24px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(12, 143, 132, 0.12);
+  color: var(--teal);
+}
+
+.payment-status-card h1 {
+  max-width: 840px;
+}
+
+.payment-success .payment-status-icon {
+  background: rgba(12, 143, 132, 0.14);
+  color: var(--teal);
+}
+
+.payment-failed .payment-status-icon {
+  background: rgba(190, 45, 45, 0.11);
+  color: #b93636;
+}
+
+.payment-pending .payment-status-icon {
+  background: rgba(217, 121, 25, 0.13);
+  color: var(--saffron);
+}
+
+.payment-helper {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.payment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .admin-login {
   display: grid;
   min-height: 100vh;

@@ -246,6 +246,15 @@ export async function listOrders() {
   })) satisfies Order[];
 }
 
+export async function updateOrderPaymentStatusByPhonePe(phonepePaymentId: string, paymentStatus: string) {
+  await readyDb();
+  await getSql()`
+    UPDATE orders
+    SET payment_status = ${paymentStatus}
+    WHERE phonepe_payment_id = ${phonepePaymentId}
+  `;
+}
+
 export async function getAnalytics() {
   await readyDb();
   const sql = getSql();
