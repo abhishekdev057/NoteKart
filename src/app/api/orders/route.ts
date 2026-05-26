@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       items: Array.isArray(body.items) ? body.items : [],
       amount: Number(body.amount ?? 0),
       shiprocketAwb: body.shiprocketAwb ? String(body.shiprocketAwb) : null,
-      razorpayOrderId: body.razorpayOrderId ? String(body.razorpayOrderId) : null,
+      phonepePaymentId: body.phonepePaymentId ? String(body.phonepePaymentId) : null,
     });
 
     return NextResponse.json({ id });

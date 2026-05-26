@@ -10,8 +10,9 @@ Next.js storefront and admin console for NoteKart, a notebook and customized not
 - Customized notebook request flow with artwork upload
 - Mobile OTP login demo
 - Admin access for configured mobile numbers
-- Admin product, category, media, order, analytics, Razorpay, and Shiprocket surfaces
-- Neon Postgres, Cloudinary, Razorpay, and Shiprocket-ready API routes
+- Admin product, category, media, order, analytics, PhonePe, and Shiprocket surfaces
+- Neon Postgres, Cloudinary, PhonePe, and Shiprocket-ready API routes
+- Public policy pages for payment gateway website verification
 
 ## Development
 
@@ -33,9 +34,11 @@ CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 ADMIN_MOBILES=
-RAZORPAY_KEY_ID=
-RAZORPAY_KEY_SECRET=
-NEXT_PUBLIC_RAZORPAY_KEY_ID=
+PHONEPE_ENV=
+PHONEPE_CLIENT_ID=
+PHONEPE_CLIENT_SECRET=
+PHONEPE_CLIENT_VERSION=
+NEXT_PUBLIC_SITE_URL=
 SHIPROCKET_EMAIL=
 SHIPROCKET_PASSWORD=
 ```

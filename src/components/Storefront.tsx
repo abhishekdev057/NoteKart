@@ -4,7 +4,6 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import {
   ArrowRight,
-  BadgeIndianRupee,
   Boxes,
   Check,
   ChevronLeft,
@@ -19,6 +18,7 @@ import {
   Search,
   ShoppingBag,
   Sparkles,
+  Smartphone,
   Upload,
   UserRound,
   X,
@@ -180,7 +180,7 @@ export function Storefront({ products }: { products: Product[] }) {
       return;
     }
     setUser(data.user);
-    setAuthMessage(data.user.role === "admin" ? "Admin access unlocked." : "You are logged in.");
+    setAuthMessage(data.user.role === "admin" ? "Admin number verified. Please use the private admin login page." : "You are logged in.");
   }
 
   async function uploadCustomFile(file: File) {
@@ -223,14 +223,14 @@ export function Storefront({ products }: { products: Product[] }) {
 
   async function checkout() {
     if (!cart.length) return;
-    setCheckoutMessage("Creating Razorpay order...");
-    const paymentResponse = await fetch("/api/payments/razorpay", {
+    setCheckoutMessage("Creating PhonePe payment...");
+    const paymentResponse = await fetch("/api/payments/phonepe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: total }),
+      body: JSON.stringify({ amount: total, mobile: user?.mobile ?? mobile }),
     });
     const payment = await paymentResponse.json();
-    const orderId = payment.order?.id;
+    const paymentId = payment.merchantOrderId;
     await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -240,10 +240,14 @@ export function Storefront({ products }: { products: Product[] }) {
         address: "Doomra / local delivery confirmation pending",
         items: cart.map((item) => ({ productId: item.id, name: item.name, quantity: item.quantity, price: item.price })),
         amount: total,
-        razorpayOrderId: orderId,
+        phonepePaymentId: paymentId,
       }),
     });
-    setCheckoutMessage(payment.mock ? `Demo order ${orderId} created. Add Razorpay keys to enable live checkout.` : "Razorpay order created.");
+    if (payment.redirectUrl) {
+      window.location.href = payment.redirectUrl;
+      return;
+    }
+    setCheckoutMessage(payment.mock ? `Demo PhonePe order ${paymentId} created. Add PhonePe credentials to enable live checkout.` : "PhonePe payment created.");
   }
 
   return (
@@ -260,7 +264,6 @@ export function Storefront({ products }: { products: Product[] }) {
             <a href="#products">Products</a>
             <a href="#custom">Customize</a>
             <a href="#craft">Craft</a>
-            <a href="/admin">Admin</a>
           </nav>
           <div className="flex items-center gap-2">
             <button className="icon-button hidden md:grid" aria-label="Search">
@@ -340,8 +343,8 @@ export function Storefront({ products }: { products: Product[] }) {
             <motion.div style={{ y: accentDrift }} className="cover-swatch cover-swatch-two" />
             <div className="ruler-rail" />
             <div className="floating-card top-8 right-0">
-              <BadgeIndianRupee size={18} />
-              Razorpay ready
+              <Smartphone size={18} />
+              PhonePe ready
             </div>
             <div className="floating-card bottom-8 left-0">
               <Boxes size={18} />
@@ -543,8 +546,8 @@ export function Storefront({ products }: { products: Product[] }) {
         <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-3">
           {[
             ["Design proof", "Custom covers are checked for crop, brightness and print fit before production."],
-            ["Manufacturing", "Notebook sizes, ruling, page count and binding can be managed from admin."],
-            ["Delivery", "Orders can be tracked using Shiprocket AWB inside the admin panel."],
+            ["Manufacturing", "Notebook sizes, ruling, page count and binding are managed privately by NoteKart."],
+            ["Delivery", "Orders can be tracked after dispatch when courier details are available."],
           ].map(([title, body]) => (
             <div className="process-panel" key={title}>
               <span />
@@ -556,9 +559,18 @@ export function Storefront({ products }: { products: Product[] }) {
       </section>
 
       <footer className="border-t border-black/10 px-4 py-10 md:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-black/62 md:flex-row md:items-center md:justify-between">
-          <strong className="text-[var(--ink)]">NoteKart, Ward no. 11, Doomra, Nawalgarh, Jhunjhunu</strong>
-          <span>Notebooks, custom covers, school and business stationery.</span>
+        <div className="mx-auto grid max-w-7xl gap-4 text-sm text-black/62 md:grid-cols-[1fr_auto] md:items-center">
+          <div>
+            <strong className="text-[var(--ink)]">NoteKart, Ward no. 11, Doomra, Nawalgarh, Jhunjhunu</strong>
+            <span className="mt-1 block">Notebooks, custom covers, school and business stationery.</span>
+          </div>
+          <div className="policy-links">
+            <a href="/terms-and-conditions">Terms</a>
+            <a href="/refund-policy">Refunds</a>
+            <a href="/privacy-policy">Privacy</a>
+            <a href="/return-policy">Returns</a>
+            <a href="/shipping-policy">Shipping</a>
+          </div>
         </div>
       </footer>
 
@@ -619,9 +631,9 @@ export function Storefront({ products }: { products: Product[] }) {
                 <button className="secondary-button justify-center" onClick={continueShopping}>
                   Continue shopping
                 </button>
-                <button className="primary-button justify-center" onClick={checkout} disabled={!cart.length}>
-                  Continue to checkout <ArrowRight size={18} />
-                </button>
+              <button className="primary-button justify-center" onClick={checkout} disabled={!cart.length}>
+                Continue to checkout <ArrowRight size={18} />
+              </button>
               </div>
               {checkoutMessage ? <p className="form-status">{checkoutMessage}</p> : null}
             </div>
@@ -645,7 +657,6 @@ export function Storefront({ products }: { products: Product[] }) {
               <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="Four digit OTP" maxLength={4} />
               <button className="primary-button justify-center" onClick={login}>Verify OTP</button>
               {authMessage ? <p className="form-status">{authMessage}</p> : null}
-              {user?.role === "admin" ? <a className="secondary-button justify-center" href="/admin">Open admin panel</a> : null}
             </div>
           </div>
         </aside>
@@ -659,8 +670,8 @@ export function Storefront({ products }: { products: Product[] }) {
               <h2>Menu</h2>
               <button className="icon-button" onClick={() => setMobileNavOpen(false)}><X size={18} /></button>
             </div>
-            {["Products", "Customize", "Craft", "Admin"].map((label) => (
-              <a className="mobile-link" href={label === "Admin" ? "/admin" : `#${label.toLowerCase()}`} key={label}>
+            {["Products", "Customize", "Craft"].map((label) => (
+              <a className="mobile-link" href={`#${label.toLowerCase()}`} key={label}>
                 {label}
               </a>
             ))}

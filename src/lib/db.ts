@@ -114,10 +114,12 @@ async function ensureSchema() {
       payment_status TEXT NOT NULL DEFAULT 'pending',
       delivery_status TEXT NOT NULL DEFAULT 'draft',
       shiprocket_awb TEXT,
-      razorpay_order_id TEXT,
+      phonepe_payment_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+
+  await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS phonepe_payment_id TEXT`;
 
   const count = (await sql`SELECT COUNT(*)::int AS count FROM products`) as DbRow[];
   if (Number(count[0]?.count ?? 0) === 0) {
@@ -220,8 +222,8 @@ export async function createOrder(order: Omit<Order, "id" | "paymentStatus" | "d
   await readyDb();
   const id = crypto.randomUUID();
   await getSql()`
-    INSERT INTO orders (id, customer_name, mobile, address, items, amount, shiprocket_awb, razorpay_order_id)
-    VALUES (${id}, ${order.customerName}, ${order.mobile}, ${order.address}, ${JSON.stringify(order.items)}::jsonb, ${order.amount}, ${order.shiprocketAwb ?? null}, ${order.razorpayOrderId ?? null})
+    INSERT INTO orders (id, customer_name, mobile, address, items, amount, shiprocket_awb, phonepe_payment_id)
+    VALUES (${id}, ${order.customerName}, ${order.mobile}, ${order.address}, ${JSON.stringify(order.items)}::jsonb, ${order.amount}, ${order.shiprocketAwb ?? null}, ${order.phonepePaymentId ?? null})
   `;
   return id;
 }
@@ -239,7 +241,7 @@ export async function listOrders() {
     paymentStatus: String(row.payment_status),
     deliveryStatus: String(row.delivery_status),
     shiprocketAwb: row.shiprocket_awb ? String(row.shiprocket_awb) : null,
-    razorpayOrderId: row.razorpay_order_id ? String(row.razorpay_order_id) : null,
+    phonepePaymentId: row.phonepe_payment_id ? String(row.phonepe_payment_id) : null,
     createdAt: row.created_at ? String(row.created_at) : undefined,
   })) satisfies Order[];
 }

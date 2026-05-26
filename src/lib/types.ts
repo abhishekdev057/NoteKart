@@ -35,6 +35,6 @@ export type Order = {
   paymentStatus: string;
   deliveryStatus: string;
   shiprocketAwb?: string | null;
-  razorpayOrderId?: string | null;
+  phonepePaymentId?: string | null;
   createdAt?: string;
 };

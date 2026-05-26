@@ -290,7 +290,7 @@ export function AdminPanel() {
         <section id="orders" className="admin-panel">
           <div className="panel-title">
             <ShoppingCart size={20} />
-            <h2>Orders, Razorpay and delivery</h2>
+            <h2>Orders, PhonePe and delivery</h2>
           </div>
           <div className="admin-table">
             {orders.map((order) => (
@@ -300,7 +300,7 @@ export function AdminPanel() {
                   <strong>{order.customerName} · ₹{order.amount}</strong>
                   <span>{order.paymentStatus} · {order.deliveryStatus} · {order.items.length} item lines</span>
                 </div>
-                <span className="admin-pill">{order.razorpayOrderId ?? "No payment id"}</span>
+                <span className="admin-pill">{order.phonepePaymentId ?? "No payment id"}</span>
               </div>
             ))}
           </div>
