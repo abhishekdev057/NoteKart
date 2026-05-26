@@ -72,6 +72,7 @@ export function PhonePeStatus({ merchantOrderId }: { merchantOrderId?: string })
   const [state, setState] = useState<PaymentState>(merchantOrderId ? "CHECKING" : "MISSING");
   const [message, setMessage] = useState("");
   const [attempts, setAttempts] = useState(0);
+  const [redirectCountdown, setRedirectCountdown] = useState(4);
 
   const visual = useMemo(() => getVisual(state), [state]);
   const Icon = visual.icon;
@@ -94,6 +95,10 @@ export function PhonePeStatus({ merchantOrderId }: { merchantOrderId?: string })
       const nextState = data.normalizedState ?? "PENDING";
       setState(nextState);
       setMessage(data.message ?? "");
+
+      if (nextState === "COMPLETED") {
+        window.localStorage.removeItem("notekart:guest-cart");
+      }
     } catch {
       setState("ERROR");
       setMessage("Unable to connect to payment status service.");
@@ -111,6 +116,20 @@ export function PhonePeStatus({ merchantOrderId }: { merchantOrderId?: string })
     return () => window.clearTimeout(timer);
   }, [shouldPoll, checkStatus]);
 
+  useEffect(() => {
+    if (state !== "COMPLETED") return;
+
+    if (redirectCountdown <= 0) {
+      window.location.href = "/";
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setRedirectCountdown((current) => current - 1);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [redirectCountdown, state]);
+
   return (
     <main className="policy-page payment-status-page">
       <section className={`policy-card payment-status-card ${visual.className}`}>
@@ -123,6 +142,9 @@ export function PhonePeStatus({ merchantOrderId }: { merchantOrderId?: string })
         {merchantOrderId ? <p className="policy-note">Reference: {merchantOrderId}</p> : null}
         {["CHECKING", "PENDING"].includes(state) ? (
           <p className="payment-helper">Auto check attempt {Math.max(attempts, 1)} of 8</p>
+        ) : null}
+        {state === "COMPLETED" ? (
+          <p className="payment-helper">Cart cleared. Redirecting to NoteKart in {redirectCountdown} seconds.</p>
         ) : null}
         <div className="payment-actions">
           {["PENDING", "ERROR"].includes(state) ? (
