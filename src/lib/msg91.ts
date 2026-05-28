@@ -69,6 +69,8 @@ export async function verifyMsg91WidgetAccessToken(accessToken: string, expected
       status: response.status,
       keys: Object.keys(data),
       type: findString(data, ["type", "status", "message"]),
+      message: findString(data, ["message"]),
+      hasError: findBoolean(data, ["hasError"]),
       success: findBoolean(data, ["success", "verified", "isVerified", "is_verified"]),
     });
     return { ok: false as const, error: "MSG91 could not verify this OTP session." };

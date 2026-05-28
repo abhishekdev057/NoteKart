@@ -113,10 +113,24 @@ function extractMsg91AccessToken(data: unknown): string {
   const record = data as Msg91VerifyData;
   for (const [key, value] of Object.entries(record)) {
     const normalizedKey = key.toLowerCase().replace(/[-_]/g, "");
-    if (typeof value === "string" && (normalizedKey.includes("token") || value.split(".").length === 3)) {
+    const isWidgetConfigToken = ["tokenauth", "widgettoken", "authtoken"].includes(normalizedKey);
+    const isAccessTokenKey = ["accesstoken", "verifiedtoken", "verificationtoken"].includes(normalizedKey);
+    if (typeof value === "string" && !isWidgetConfigToken && (isAccessTokenKey || value.split(".").length === 3)) {
       return value;
     }
     const nested = extractMsg91AccessToken(value);
+    if (nested) return nested;
+  }
+  return "";
+}
+
+function extractMsg91ReqId(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const record = data as Msg91VerifyData;
+  for (const [key, value] of Object.entries(record)) {
+    const normalizedKey = key.toLowerCase().replace(/[-_]/g, "");
+    if (typeof value === "string" && ["reqid", "requestid"].includes(normalizedKey)) return value;
+    const nested = extractMsg91ReqId(value);
     if (nested) return nested;
   }
   return "";
@@ -160,6 +174,7 @@ export function Storefront({ products }: { products: Product[] }) {
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
   const [otpStage, setOtpStage] = useState<"mobile" | "code">("mobile");
+  const [msg91ReqId, setMsg91ReqId] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [user, setUser] = useState<CustomerUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
@@ -265,9 +280,11 @@ export function Storefront({ products }: { products: Product[] }) {
           setAuthMessage("MSG91 OTP is loading. Please try again in a moment.");
           return;
         }
-        await new Promise<void>((resolve, reject) => {
-          window.sendOtp?.(msg91Identifier(mobile), () => resolve(), (error) => reject(error));
+        const sendData = await new Promise<unknown>((resolve, reject) => {
+          window.sendOtp?.(msg91Identifier(mobile), (data) => resolve(data), (error) => reject(error));
         });
+        rememberMsg91WidgetData(sendData);
+        setMsg91ReqId(extractMsg91ReqId(sendData));
         setOtpStage("code");
         setAuthMessage("OTP sent to your mobile.");
         return;
@@ -303,12 +320,11 @@ export function Storefront({ products }: { products: Product[] }) {
           window.verifyOtp?.(otp, (data) => {
             rememberMsg91WidgetData(data);
             resolve(data);
-          }, (error) => reject(error));
+          }, (error) => reject(error), msg91ReqId || undefined);
         });
         const accessToken =
           extractMsg91AccessToken(widgetData) ||
-          extractMsg91AccessToken(window.__notekartMsg91WidgetData) ||
-          extractMsg91AccessToken(window.getWidgetData?.());
+          extractMsg91AccessToken(window.__notekartMsg91WidgetData);
         if (!accessToken) {
           setAuthMessage("MSG91 verified OTP but did not return an access token.");
           return;
