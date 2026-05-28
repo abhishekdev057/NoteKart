@@ -691,6 +691,8 @@ img {
 .custom-form input,
 .custom-form textarea,
 .login-card input,
+.checkout-address-form input,
+.checkout-address-form textarea,
 .admin-form input,
 .admin-form textarea,
 .delivery-form input,
@@ -710,6 +712,8 @@ img {
 .custom-form input:focus,
 .custom-form textarea:focus,
 .login-card input:focus,
+.checkout-address-form input:focus,
+.checkout-address-form textarea:focus,
 .admin-form input:focus,
 .admin-form textarea:focus,
 .delivery-form input:focus,
@@ -912,6 +916,41 @@ img {
 .cart-actions .primary-button,
 .cart-actions .secondary-button {
   width: 100%;
+}
+
+.checkout-address-form,
+.checkout-login-gate {
+  display: grid;
+  gap: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(23, 19, 15, 0.1);
+  background: rgba(255, 253, 247, 0.7);
+  padding: 12px;
+}
+
+.checkout-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: rgba(12, 143, 132, 0.1);
+  padding: 10px;
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.checkout-login-gate {
+  justify-items: start;
+}
+
+.checkout-login-gate strong {
+  font-size: 18px;
+}
+
+.checkout-login-gate span {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .empty-cart {

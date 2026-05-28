@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import {
   ArrowRight,
@@ -27,10 +27,13 @@ import type { Product } from "@/lib/types";
 
 type CartItem = Product & { quantity: number };
 const CART_STORAGE_KEY = "notekart:guest-cart";
+const USER_STORAGE_KEY = "notekart:user";
 const CART_CHANGE_EVENT = "notekart:cart-change";
 const EMPTY_CART: CartItem[] = [];
 let cachedCartRaw = "";
 let cachedCartSnapshot: CartItem[] = EMPTY_CART;
+
+type CustomerUser = { mobile: string; role: string };
 
 function readStoredCartSnapshot(): CartItem[] {
   if (typeof window === "undefined") return [];
@@ -118,8 +121,16 @@ export function Storefront({ products }: { products: Product[] }) {
   const [imageIndex, setImageIndex] = useState(0);
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
-  const [user, setUser] = useState<{ mobile: string; role: string } | null>(null);
+  const [user, setUser] = useState<CustomerUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
+  const [checkoutAddress, setCheckoutAddress] = useState({
+    customerName: "",
+    line1: "",
+    city: "Nawalgarh",
+    state: "Rajasthan",
+    pincode: "",
+    landmark: "",
+  });
   const [customFileUrl, setCustomFileUrl] = useState("");
   const [customStatus, setCustomStatus] = useState("");
   const [customSubmitted, setCustomSubmitted] = useState(false);
@@ -131,6 +142,19 @@ export function Storefront({ products }: { products: Product[] }) {
   const accentDrift = useTransform(scrollYProgress, [0, 0.35], [0, -140]);
   const paperDrift = useTransform(scrollYProgress, [0, 0.35], [0, 120]);
   const paperDriftSlow = useTransform(scrollYProgress, [0, 0.35], [0, 52]);
+
+  useEffect(() => {
+    const storedUser = window.localStorage.getItem(USER_STORAGE_KEY);
+    queueMicrotask(() => {
+      if (!storedUser) return;
+      try {
+        const parsed = JSON.parse(storedUser) as CustomerUser;
+        if (parsed?.mobile && parsed?.role) setUser(parsed);
+      } catch {
+        window.localStorage.removeItem(USER_STORAGE_KEY);
+      }
+    });
+  }, []);
 
   const categories = useMemo(
     () => ["All", ...Array.from(new Set(products.map((product) => product.category)))],
@@ -180,7 +204,28 @@ export function Storefront({ products }: { products: Product[] }) {
       return;
     }
     setUser(data.user);
+    window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
     setAuthMessage(data.user.role === "admin" ? "Admin number verified. Please use the private admin login page." : "You are logged in.");
+    if (data.user.role === "customer") setAuthOpen(false);
+  }
+
+  function logout() {
+    setUser(null);
+    window.localStorage.removeItem(USER_STORAGE_KEY);
+    setAuthMessage("You are logged out.");
+  }
+
+  function formattedAddress() {
+    return [
+      checkoutAddress.line1,
+      checkoutAddress.landmark ? `Landmark: ${checkoutAddress.landmark}` : "",
+      checkoutAddress.city,
+      checkoutAddress.state,
+      checkoutAddress.pincode,
+    ]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(", ");
   }
 
   async function uploadCustomFile(file: File) {
@@ -223,11 +268,20 @@ export function Storefront({ products }: { products: Product[] }) {
 
   async function checkout() {
     if (!cart.length) return;
+    if (!user) {
+      setCheckoutMessage("Login is required before checkout.");
+      setAuthOpen(true);
+      return;
+    }
+    if (!checkoutAddress.customerName.trim() || !checkoutAddress.line1.trim() || checkoutAddress.pincode.trim().length < 6) {
+      setCheckoutMessage("Please fill your name, full address, and 6 digit pincode.");
+      return;
+    }
     setCheckoutMessage("Creating PhonePe payment...");
     const paymentResponse = await fetch("/api/payments/phonepe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: total, mobile: user?.mobile ?? mobile }),
+      body: JSON.stringify({ amount: total, mobile: user.mobile }),
     });
     const payment = await paymentResponse.json();
     const paymentId = payment.merchantOrderId;
@@ -235,9 +289,9 @@ export function Storefront({ products }: { products: Product[] }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        customerName: user?.mobile ? `Customer ${user.mobile}` : "Guest customer",
-        mobile: user?.mobile ?? mobile,
-        address: "Doomra / local delivery confirmation pending",
+        customerName: checkoutAddress.customerName.trim(),
+        mobile: user.mobile,
+        address: formattedAddress(),
         items: cart.map((item) => ({ productId: item.id, name: item.name, quantity: item.quantity, price: item.price })),
         amount: total,
         phonepePaymentId: paymentId,
@@ -631,9 +685,67 @@ export function Storefront({ products }: { products: Product[] }) {
                 <button className="secondary-button justify-center" onClick={continueShopping}>
                   Continue shopping
                 </button>
-              <button className="primary-button justify-center" onClick={checkout} disabled={!cart.length}>
-                Continue to checkout <ArrowRight size={18} />
-              </button>
+                {user ? (
+                  <form className="checkout-address-form" onSubmit={(event) => event.preventDefault()}>
+                    <div className="checkout-user">
+                      <Check size={17} />
+                      <span>Logged in as {user.mobile}</span>
+                    </div>
+                    <input
+                      value={checkoutAddress.customerName}
+                      onChange={(event) => setCheckoutAddress({ ...checkoutAddress, customerName: event.target.value })}
+                      placeholder="Full name"
+                      required
+                    />
+                    <textarea
+                      value={checkoutAddress.line1}
+                      onChange={(event) => setCheckoutAddress({ ...checkoutAddress, line1: event.target.value })}
+                      placeholder="House / street / area address"
+                      rows={3}
+                      required
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        value={checkoutAddress.city}
+                        onChange={(event) => setCheckoutAddress({ ...checkoutAddress, city: event.target.value })}
+                        placeholder="City"
+                        required
+                      />
+                      <input
+                        value={checkoutAddress.state}
+                        onChange={(event) => setCheckoutAddress({ ...checkoutAddress, state: event.target.value })}
+                        placeholder="State"
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        value={checkoutAddress.pincode}
+                        onChange={(event) => setCheckoutAddress({ ...checkoutAddress, pincode: event.target.value.replace(/\D/g, "").slice(0, 6) })}
+                        placeholder="Pincode"
+                        inputMode="numeric"
+                        required
+                      />
+                      <input
+                        value={checkoutAddress.landmark}
+                        onChange={(event) => setCheckoutAddress({ ...checkoutAddress, landmark: event.target.value })}
+                        placeholder="Landmark optional"
+                      />
+                    </div>
+                    <button className="primary-button justify-center" onClick={checkout} disabled={!cart.length}>
+                      Pay and place order <ArrowRight size={18} />
+                    </button>
+                  </form>
+                ) : (
+                  <div className="checkout-login-gate">
+                    <LockKeyhole size={22} />
+                    <strong>Login required</strong>
+                    <span>Please verify your mobile number before placing the order.</span>
+                    <button className="primary-button justify-center" onClick={() => setAuthOpen(true)}>
+                      Login with OTP <UserRound size={18} />
+                    </button>
+                  </div>
+                )}
               </div>
               {checkoutMessage ? <p className="form-status">{checkoutMessage}</p> : null}
             </div>
@@ -651,11 +763,17 @@ export function Storefront({ products }: { products: Product[] }) {
             </div>
             <div className="login-card">
               <LockKeyhole size={28} />
-              <h3>Mobile OTP access</h3>
-              <p>Use any mobile number. OTP must be 0000, 1111, 2222 and so on.</p>
-              <input value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="Mobile number" />
-              <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="Four digit OTP" maxLength={4} />
-              <button className="primary-button justify-center" onClick={login}>Verify OTP</button>
+              <h3>{user ? "Account verified" : "Mobile OTP access"}</h3>
+              <p>{user ? `Logged in with ${user.mobile}. Orders can now be placed with a delivery address.` : "Use any mobile number. OTP must be 0000, 1111, 2222 and so on."}</p>
+              {user ? (
+                <button className="secondary-button justify-center" onClick={logout}>Logout</button>
+              ) : (
+                <>
+                  <input value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="Mobile number" />
+                  <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="Four digit OTP" maxLength={4} />
+                  <button className="primary-button justify-center" onClick={login}>Verify OTP</button>
+                </>
+              )}
               {authMessage ? <p className="form-status">{authMessage}</p> : null}
             </div>
           </div>
