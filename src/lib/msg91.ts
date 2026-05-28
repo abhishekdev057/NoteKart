@@ -16,10 +16,29 @@ function findString(value: unknown, keys: string[]): string | null {
   return null;
 }
 
+function findBoolean(value: unknown, keys: string[]): boolean | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const direct = record[key];
+    if (typeof direct === "boolean") return direct;
+  }
+  for (const nested of Object.values(record)) {
+    const found = findBoolean(nested, keys);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
 function isSuccessResponse(data: Msg91VerifyResponse) {
+  const ok = findBoolean(data, ["success", "verified", "isVerified", "is_verified"]);
+  if (ok === true) return true;
+  if (ok === false) return false;
+
   const type = findString(data, ["type", "status", "message"]);
   if (!type) return false;
-  return /success|verified|valid/i.test(type);
+  if (/error|fail|invalid|expired|not/i.test(type)) return false;
+  return /success|verified|valid|approved/i.test(type);
 }
 
 function verifiedIdentifier(data: Msg91VerifyResponse) {
@@ -46,6 +65,12 @@ export async function verifyMsg91WidgetAccessToken(accessToken: string, expected
 
   const data = (await response.json().catch(() => ({}))) as Msg91VerifyResponse;
   if (!response.ok || !isSuccessResponse(data)) {
+    console.warn("[notekart] MSG91 access token verification rejected:", {
+      status: response.status,
+      keys: Object.keys(data),
+      type: findString(data, ["type", "status", "message"]),
+      success: findBoolean(data, ["success", "verified", "isVerified", "is_verified"]),
+    });
     return { ok: false as const, error: "MSG91 could not verify this OTP session." };
   }
 
