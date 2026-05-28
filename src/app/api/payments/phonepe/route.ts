@@ -1,49 +1,41 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getOrderById, setOrderPhonePeId } from "@/lib/db";
+import { getPhonePeAccessToken, getPhonePeBaseUrl } from "@/lib/phonepe";
+import { requireUser } from "@/lib/session";
+import { errorResponse } from "@/lib/http";
 
-function getPhonePeBaseUrl() {
-  return process.env.PHONEPE_ENV === "production"
-    ? "https://api.phonepe.com/apis/pg"
-    : "https://api-preprod.phonepe.com/apis/pg-sandbox";
-}
+const paySchema = z.object({ orderId: z.string().trim().min(1) });
 
-async function getPhonePeAccessToken() {
-  const clientId = process.env.PHONEPE_CLIENT_ID;
-  const clientSecret = process.env.PHONEPE_CLIENT_SECRET;
-  const clientVersion = process.env.PHONEPE_CLIENT_VERSION ?? "1";
-
-  if (!clientId || !clientSecret) return null;
-
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    client_version: clientVersion,
-    grant_type: "client_credentials",
-  });
-
-  const response = await fetch(`${getPhonePeBaseUrl()}/v1/oauth/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
-
-  if (!response.ok) {
-    throw new Error(`PhonePe auth failed with ${response.status}`);
-  }
-
-  const data = await response.json();
-  return String(data.access_token ?? data.data?.access_token ?? "");
+function siteUrl() {
+  const url =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  return url.replace(/\/$/, "");
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const amount = Math.max(1, Number(body.amount ?? 0));
-    const merchantOrderId = `notekart_${Date.now()}`;
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-    const redirectUrl = `${siteUrl.replace(/\/$/, "")}/payment/phonepe/redirect?merchantOrderId=${merchantOrderId}`;
+    const session = await requireUser();
+    const { orderId } = paySchema.parse(await request.json());
+
+    const order = await getOrderById(orderId);
+    if (!order || order.mobile !== session.mobile) {
+      return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    }
+    if (order.paymentStatus === "paid") {
+      return NextResponse.json({ error: "This order is already paid." }, { status: 409 });
+    }
+
+    // Unguessable, unique-per-attempt reference. Amount comes from the stored
+    // order, never from the client.
+    const merchantOrderId = `nk_${randomUUID().replace(/-/g, "")}`;
+    const amountPaise = order.amount * 100;
+    const redirectUrl = `${siteUrl()}/payment/phonepe/redirect?merchantOrderId=${merchantOrderId}`;
+
     const accessToken = await getPhonePeAccessToken();
+    await setOrderPhonePeId(order.id, merchantOrderId);
 
     if (!accessToken) {
       return NextResponse.json({
@@ -56,18 +48,12 @@ export async function POST(request: Request) {
 
     const response = await fetch(`${getPhonePeBaseUrl()}/checkout/v2/pay`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `O-Bearer ${accessToken}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `O-Bearer ${accessToken}` },
       body: JSON.stringify({
         merchantOrderId,
-        amount: amount * 100,
+        amount: amountPaise,
         expireAfter: 1200,
-        metaInfo: {
-          udf1: "NoteKart",
-          udf2: String(body.mobile ?? ""),
-        },
+        metaInfo: { udf1: "NoteKart", udf2: session.mobile },
         paymentFlow: {
           type: "PG_CHECKOUT",
           message: "NoteKart notebook order payment",
@@ -78,7 +64,10 @@ export async function POST(request: Request) {
 
     const data = await response.json();
     if (!response.ok) {
-      return NextResponse.json({ error: data.message ?? "Unable to create PhonePe payment." }, { status: response.status });
+      return NextResponse.json(
+        { error: typeof data?.message === "string" ? data.message : "Unable to create PhonePe payment." },
+        { status: response.status },
+      );
     }
 
     const paymentUrl =
@@ -89,8 +78,8 @@ export async function POST(request: Request) {
       data.url ??
       null;
 
-    return NextResponse.json({ merchantOrderId, redirectUrl: paymentUrl, raw: data });
+    return NextResponse.json({ merchantOrderId, redirectUrl: paymentUrl });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to create PhonePe payment." }, { status: 500 });
+    return errorResponse(error, "Unable to create PhonePe payment.");
   }
 }

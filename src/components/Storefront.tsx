@@ -27,13 +27,22 @@ import type { Product } from "@/lib/types";
 
 type CartItem = Product & { quantity: number };
 const CART_STORAGE_KEY = "notekart:guest-cart";
-const USER_STORAGE_KEY = "notekart:user";
 const CART_CHANGE_EVENT = "notekart:cart-change";
 const EMPTY_CART: CartItem[] = [];
 let cachedCartRaw = "";
 let cachedCartSnapshot: CartItem[] = EMPTY_CART;
 
 type CustomerUser = { mobile: string; role: string };
+type Msg91VerifyData = Record<string, unknown>;
+
+declare global {
+  interface Window {
+    initSendOTP?: (configuration: Record<string, unknown>) => void;
+    sendOtp?: (identifier: string, success?: (data: unknown) => void, failure?: (error: unknown) => void) => void;
+    retryOtp?: (channel: string | null, success?: (data: unknown) => void, failure?: (error: unknown) => void, reqId?: string) => void;
+    verifyOtp?: (otp: string, success?: (data: unknown) => void, failure?: (error: unknown) => void, reqId?: string) => void;
+  }
+}
 
 function readStoredCartSnapshot(): CartItem[] {
   if (typeof window === "undefined") return [];
@@ -88,6 +97,28 @@ function getServerCartSnapshot() {
   return EMPTY_CART;
 }
 
+function msg91WidgetConfigured() {
+  return Boolean(process.env.NEXT_PUBLIC_MSG91_WIDGET_ID && process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN);
+}
+
+function msg91Identifier(mobile: string) {
+  return `91${mobile.replace(/\D/g, "").slice(-10)}`;
+}
+
+function extractMsg91AccessToken(data: unknown) {
+  if (!data || typeof data !== "object") return "";
+  const record = data as Msg91VerifyData;
+  const token =
+    record.token ??
+    record.accessToken ??
+    record.access_token ??
+    record["access-token"] ??
+    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData).token : undefined) ??
+    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData).accessToken : undefined) ??
+    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData)["access-token"] : undefined);
+  return typeof token === "string" ? token : "";
+}
+
 function QuantityStepper({
   label,
   quantity,
@@ -121,6 +152,8 @@ export function Storefront({ products }: { products: Product[] }) {
   const [imageIndex, setImageIndex] = useState(0);
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
+  const [otpStage, setOtpStage] = useState<"mobile" | "code">("mobile");
+  const [authBusy, setAuthBusy] = useState(false);
   const [user, setUser] = useState<CustomerUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
   const [checkoutAddress, setCheckoutAddress] = useState({
@@ -144,16 +177,41 @@ export function Storefront({ products }: { products: Product[] }) {
   const paperDriftSlow = useTransform(scrollYProgress, [0, 0.35], [0, 52]);
 
   useEffect(() => {
-    const storedUser = window.localStorage.getItem(USER_STORAGE_KEY);
-    queueMicrotask(() => {
-      if (!storedUser) return;
-      try {
-        const parsed = JSON.parse(storedUser) as CustomerUser;
-        if (parsed?.mobile && parsed?.role) setUser(parsed);
-      } catch {
-        window.localStorage.removeItem(USER_STORAGE_KEY);
-      }
-    });
+    // The session is an httpOnly cookie verified server-side; ask the server
+    // who we are rather than trusting anything in the browser.
+    let active = true;
+    fetch("/api/auth/session")
+      .then((response) => response.json())
+      .then((data) => {
+        if (active && data.user) setUser(data.user as CustomerUser);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!msg91WidgetConfigured() || window.sendOtp) return;
+    const configuration = {
+      widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
+      tokenAuth: process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN,
+      exposeMethods: true,
+      captchaRenderId: "",
+      success: () => {},
+      failure: () => {},
+    };
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://verify.msg91.com/otp-provider.js"]');
+    if (existing) {
+      existing.addEventListener("load", () => window.initSendOTP?.(configuration));
+      window.initSendOTP?.(configuration);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://verify.msg91.com/otp-provider.js";
+    script.async = true;
+    script.onload = () => window.initSendOTP?.(configuration);
+    document.body.appendChild(script);
   }, []);
 
   const categories = useMemo(
@@ -191,27 +249,108 @@ export function Storefront({ products }: { products: Product[] }) {
     document.getElementById("products")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  async function login() {
+  async function requestOtp() {
     setAuthMessage("");
-    const response = await fetch("/api/auth/otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mobile, otp }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setAuthMessage(data.error ?? "Login failed.");
-      return;
+    setAuthBusy(true);
+    try {
+      if (msg91WidgetConfigured()) {
+        if (!window.sendOtp) {
+          setAuthMessage("MSG91 OTP is loading. Please try again in a moment.");
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          window.sendOtp?.(msg91Identifier(mobile), () => resolve(), (error) => reject(error));
+        });
+        setOtpStage("code");
+        setAuthMessage("OTP sent to your mobile.");
+        return;
+      }
+
+      const response = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setAuthMessage(data.error ?? "Could not send OTP.");
+        return;
+      }
+      setOtpStage("code");
+      setAuthMessage(data.devCode ? `Dev OTP: ${data.devCode}` : data.message ?? "OTP sent to your mobile.");
+    } finally {
+      setAuthBusy(false);
     }
-    setUser(data.user);
-    window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
-    setAuthMessage(data.user.role === "admin" ? "Admin number verified. Please use the private admin login page." : "You are logged in.");
-    if (data.user.role === "customer") setAuthOpen(false);
   }
 
-  function logout() {
+  async function verifyOtp() {
+    setAuthMessage("");
+    setAuthBusy(true);
+    try {
+      if (msg91WidgetConfigured()) {
+        if (!window.verifyOtp) {
+          setAuthMessage("MSG91 OTP is still loading. Please try again.");
+          return;
+        }
+        const widgetData = await new Promise<unknown>((resolve, reject) => {
+          window.verifyOtp?.(otp, (data) => resolve(data), (error) => reject(error));
+        });
+        const accessToken = extractMsg91AccessToken(widgetData);
+        if (!accessToken) {
+          setAuthMessage("MSG91 verified OTP but did not return an access token.");
+          return;
+        }
+        const sessionResponse = await fetch("/api/auth/msg91-widget/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mobile, accessToken }),
+        });
+        const sessionData = await sessionResponse.json();
+        if (!sessionResponse.ok) {
+          setAuthMessage(sessionData.error ?? "Could not create NoteKart session.");
+          return;
+        }
+        setUser(sessionData.user);
+        setOtp("");
+        setOtpStage("mobile");
+        if (sessionData.user.role === "admin") {
+          setAuthMessage("Admin number verified. Use the private admin panel.");
+        } else {
+          setAuthMessage("You are logged in.");
+          setAuthOpen(false);
+        }
+        return;
+      }
+
+      const response = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile, code: otp }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setAuthMessage(data.error ?? "Verification failed.");
+        return;
+      }
+      setUser(data.user);
+      setOtp("");
+      setOtpStage("mobile");
+      if (data.user.role === "admin") {
+        setAuthMessage("Admin number verified. Use the private admin panel.");
+      } else {
+        setAuthMessage("You are logged in.");
+        setAuthOpen(false);
+      }
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     setUser(null);
-    window.localStorage.removeItem(USER_STORAGE_KEY);
+    setOtpStage("mobile");
+    setOtp("");
     setAuthMessage("You are logged out.");
   }
 
@@ -277,31 +416,47 @@ export function Storefront({ products }: { products: Product[] }) {
       setCheckoutMessage("Please fill your name, full address, and 6 digit pincode.");
       return;
     }
-    setCheckoutMessage("Creating PhonePe payment...");
-    const paymentResponse = await fetch("/api/payments/phonepe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: total, mobile: user.mobile }),
-    });
-    const payment = await paymentResponse.json();
-    const paymentId = payment.merchantOrderId;
-    await fetch("/api/orders", {
+    setCheckoutMessage("Creating your order...");
+
+    // 1. Create the order server-side. The server prices it from the catalog —
+    //    the client never sends an amount.
+    const orderResponse = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         customerName: checkoutAddress.customerName.trim(),
-        mobile: user.mobile,
         address: formattedAddress(),
-        items: cart.map((item) => ({ productId: item.id, name: item.name, quantity: item.quantity, price: item.price })),
-        amount: total,
-        phonepePaymentId: paymentId,
+        items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
       }),
     });
+    const order = await orderResponse.json();
+    if (!orderResponse.ok) {
+      setCheckoutMessage(order.error ?? "Could not create your order.");
+      return;
+    }
+
+    // 2. Start payment for that order; the amount is taken from the stored order.
+    setCheckoutMessage("Creating PhonePe payment...");
+    const paymentResponse = await fetch("/api/payments/phonepe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId: order.id }),
+    });
+    const payment = await paymentResponse.json();
+    if (!paymentResponse.ok) {
+      setCheckoutMessage(payment.error ?? "Could not start the payment.");
+      return;
+    }
+
     if (payment.redirectUrl) {
       window.location.href = payment.redirectUrl;
       return;
     }
-    setCheckoutMessage(payment.mock ? `Demo PhonePe order ${paymentId} created. Add PhonePe credentials to enable live checkout.` : "PhonePe payment created.");
+    setCheckoutMessage(
+      payment.mock
+        ? `Demo PhonePe order ${payment.merchantOrderId} created. Add PhonePe credentials to enable live checkout.`
+        : "PhonePe payment created.",
+    );
   }
 
   return (
@@ -763,15 +918,48 @@ export function Storefront({ products }: { products: Product[] }) {
             </div>
             <div className="login-card">
               <LockKeyhole size={28} />
-              <h3>{user ? "Account verified" : "Mobile OTP access"}</h3>
-              <p>{user ? `Logged in with ${user.mobile}. Orders can now be placed with a delivery address.` : "Use any mobile number. OTP must be 0000, 1111, 2222 and so on."}</p>
+              <h3>{user ? "Account verified" : "Mobile OTP login"}</h3>
+              <p>
+                {user
+                  ? `Logged in with ${user.mobile}. Orders can now be placed with a delivery address.`
+                  : "Enter your mobile number to receive a one-time password by SMS."}
+              </p>
               {user ? (
                 <button className="secondary-button justify-center" onClick={logout}>Logout</button>
+              ) : otpStage === "mobile" ? (
+                <>
+                  <input
+                    value={mobile}
+                    onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                    placeholder="10 digit mobile number"
+                    inputMode="numeric"
+                  />
+                  <button className="primary-button justify-center" onClick={requestOtp} disabled={authBusy || mobile.length !== 10}>
+                    {authBusy ? "Sending..." : "Send OTP"}
+                  </button>
+                </>
               ) : (
                 <>
-                  <input value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="Mobile number" />
-                  <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="Four digit OTP" maxLength={4} />
-                  <button className="primary-button justify-center" onClick={login}>Verify OTP</button>
+                  <input
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 8))}
+                    placeholder="Enter OTP"
+                    inputMode="numeric"
+                    maxLength={8}
+                  />
+                  <button className="primary-button justify-center" onClick={verifyOtp} disabled={authBusy || otp.length < 4}>
+                    {authBusy ? "Verifying..." : "Verify OTP"}
+                  </button>
+                  <button
+                    className="secondary-button justify-center"
+                    onClick={() => {
+                      setOtpStage("mobile");
+                      setOtp("");
+                      setAuthMessage("");
+                    }}
+                  >
+                    Change number
+                  </button>
                 </>
               )}
               {authMessage ? <p className="form-status">{authMessage}</p> : null}

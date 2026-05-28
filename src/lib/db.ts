@@ -127,6 +127,24 @@ async function ensureSchema() {
   await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_tracking_number TEXT`;
   await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_notes TEXT`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS otp_codes (
+      mobile TEXT PRIMARY KEY,
+      code_hash TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      bucket TEXT PRIMARY KEY,
+      count INTEGER NOT NULL DEFAULT 0,
+      window_start TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
   const count = (await sql`SELECT COUNT(*)::int AS count FROM products`) as DbRow[];
   if (Number(count[0]?.count ?? 0) === 0) {
     for (const product of seedProducts) {
@@ -241,10 +259,8 @@ export async function createOrder(order: Omit<Order, "id" | "paymentStatus" | "d
   return id;
 }
 
-export async function listOrders() {
-  await readyDb();
-  const rows = (await getSql()`SELECT * FROM orders ORDER BY created_at DESC`) as DbRow[];
-  return rows.map((row) => ({
+function rowToOrder(row: DbRow): Order {
+  return {
     id: String(row.id),
     customerName: String(row.customer_name),
     mobile: String(row.mobile),
@@ -259,7 +275,13 @@ export async function listOrders() {
     deliveryNotes: row.delivery_notes ? String(row.delivery_notes) : null,
     phonepePaymentId: row.phonepe_payment_id ? String(row.phonepe_payment_id) : null,
     createdAt: row.created_at ? String(row.created_at) : undefined,
-  })) satisfies Order[];
+  };
+}
+
+export async function listOrders() {
+  await readyDb();
+  const rows = (await getSql()`SELECT * FROM orders ORDER BY created_at DESC`) as DbRow[];
+  return rows.map(rowToOrder);
 }
 
 export async function updateOrderDelivery(
@@ -285,6 +307,98 @@ export async function updateOrderPaymentStatusByPhonePe(phonepePaymentId: string
     SET payment_status = ${paymentStatus}
     WHERE phonepe_payment_id = ${phonepePaymentId}
   `;
+}
+
+export async function getProductsByIds(ids: string[]) {
+  await readyDb();
+  if (!ids.length) return new Map<string, Product>();
+  const rows = (await getSql()`SELECT * FROM products WHERE id = ANY(${ids})`) as DbRow[];
+  return new Map(rows.map(rowToProduct).map((product) => [product.id, product]));
+}
+
+export async function getOrderById(id: string) {
+  await readyDb();
+  const rows = (await getSql()`SELECT * FROM orders WHERE id = ${id} LIMIT 1`) as DbRow[];
+  return rows[0] ? rowToOrder(rows[0]) : null;
+}
+
+export async function getOrderByPhonePeId(phonepePaymentId: string) {
+  await readyDb();
+  const rows = (await getSql()`SELECT * FROM orders WHERE phonepe_payment_id = ${phonepePaymentId} LIMIT 1`) as DbRow[];
+  return rows[0] ? rowToOrder(rows[0]) : null;
+}
+
+export async function setOrderPhonePeId(id: string, phonepePaymentId: string) {
+  await readyDb();
+  await getSql()`UPDATE orders SET phonepe_payment_id = ${phonepePaymentId} WHERE id = ${id}`;
+}
+
+/** Decrement stock only when enough is available. Returns true if it succeeded. */
+export async function decrementStock(productId: string, quantity: number) {
+  await readyDb();
+  const rows = (await getSql()`
+    UPDATE products SET stock = stock - ${quantity}
+    WHERE id = ${productId} AND stock >= ${quantity}
+    RETURNING id
+  `) as DbRow[];
+  return rows.length > 0;
+}
+
+/**
+ * Atomic fixed-window rate limiter. Returns true when the action is allowed.
+ * The whole check-and-increment happens in one statement to avoid races.
+ */
+export async function consumeRateLimit(bucket: string, limit: number, windowSeconds: number) {
+  await readyDb();
+  const rows = (await getSql()`
+    INSERT INTO rate_limits (bucket, count, window_start)
+    VALUES (${bucket}, 1, now())
+    ON CONFLICT (bucket) DO UPDATE SET
+      count = CASE
+        WHEN rate_limits.window_start < now() - (${windowSeconds} * interval '1 second') THEN 1
+        ELSE rate_limits.count + 1
+      END,
+      window_start = CASE
+        WHEN rate_limits.window_start < now() - (${windowSeconds} * interval '1 second') THEN now()
+        ELSE rate_limits.window_start
+      END
+    RETURNING count
+  `) as DbRow[];
+  return Number(rows[0]?.count ?? limit + 1) <= limit;
+}
+
+export async function saveOtp(mobile: string, codeHash: string, expiresInSeconds: number) {
+  await readyDb();
+  await getSql()`
+    INSERT INTO otp_codes (mobile, code_hash, attempts, expires_at, created_at)
+    VALUES (${mobile}, ${codeHash}, 0, now() + (${expiresInSeconds} * interval '1 second'), now())
+    ON CONFLICT (mobile) DO UPDATE SET
+      code_hash = EXCLUDED.code_hash,
+      attempts = 0,
+      expires_at = EXCLUDED.expires_at,
+      created_at = now()
+  `;
+}
+
+export async function getActiveOtp(mobile: string) {
+  await readyDb();
+  const rows = (await getSql()`
+    SELECT code_hash, attempts FROM otp_codes
+    WHERE mobile = ${mobile} AND expires_at > now()
+    LIMIT 1
+  `) as DbRow[];
+  if (!rows[0]) return null;
+  return { codeHash: String(rows[0].code_hash), attempts: Number(rows[0].attempts) };
+}
+
+export async function incrementOtpAttempts(mobile: string) {
+  await readyDb();
+  await getSql()`UPDATE otp_codes SET attempts = attempts + 1 WHERE mobile = ${mobile}`;
+}
+
+export async function deleteOtp(mobile: string) {
+  await readyDb();
+  await getSql()`DELETE FROM otp_codes WHERE mobile = ${mobile}`;
 }
 
 export async function getAnalytics() {

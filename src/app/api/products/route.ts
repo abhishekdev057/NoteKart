@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { listProducts, upsertProduct } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
+import { productSchema } from "@/lib/validation";
+import { errorResponse } from "@/lib/http";
 import type { Product } from "@/lib/types";
 
 function slugify(value: string) {
@@ -10,33 +13,34 @@ export async function GET() {
   try {
     return NextResponse.json({ products: await listProducts() });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load products." }, { status: 500 });
+    return errorResponse(error, "Unable to load products.");
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const name = String(body.name ?? "Untitled Notebook");
-    const id = String(body.id ?? crypto.randomUUID());
+    await requireAdmin();
+    const input = productSchema.parse(await request.json());
+
+    const name = input.name;
     const product: Product = {
-      id,
+      id: input.id ?? crypto.randomUUID(),
       name,
-      slug: String(body.slug ?? slugify(name)),
-      category: String(body.category ?? "Notebooks"),
-      price: Number(body.price ?? 0),
-      compareAtPrice: body.compareAtPrice ? Number(body.compareAtPrice) : null,
-      stock: Number(body.stock ?? 0),
-      description: String(body.description ?? ""),
-      specs: body.specs && typeof body.specs === "object" ? body.specs : {},
-      images: Array.isArray(body.images) ? body.images : [],
-      isCustomizable: Boolean(body.isCustomizable),
-      isFeatured: Boolean(body.isFeatured),
+      slug: input.slug || slugify(name),
+      category: input.category,
+      price: input.price,
+      compareAtPrice: input.compareAtPrice ?? null,
+      stock: input.stock,
+      description: input.description,
+      specs: input.specs,
+      images: input.images,
+      isCustomizable: input.isCustomizable,
+      isFeatured: input.isFeatured,
     };
 
     await upsertProduct(product);
     return NextResponse.json({ product });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to save product." }, { status: 500 });
+    return errorResponse(error, "Unable to save product.");
   }
 }

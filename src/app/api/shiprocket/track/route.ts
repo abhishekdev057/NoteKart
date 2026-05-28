@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/session";
+import { errorResponse } from "@/lib/http";
 
 let tokenCache: { token: string; expires: number } | null = null;
 
@@ -22,6 +24,7 @@ async function getShiprocketToken() {
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const { awb } = await request.json();
     const token = await getShiprocketToken();
 
@@ -42,6 +45,6 @@ export async function POST(request: Request) {
     const tracking = await response.json();
     return NextResponse.json({ tracking });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to track shipment." }, { status: 500 });
+    return errorResponse(error, "Unable to track shipment.");
   }
 }

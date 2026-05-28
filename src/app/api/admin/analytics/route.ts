@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getAnalytics } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
+import { errorResponse } from "@/lib/http";
 
 export async function GET() {
   try {
+    await requireAdmin();
     return NextResponse.json(await getAnalytics());
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load analytics." }, { status: 500 });
+    return errorResponse(error, "Unable to load analytics.");
   }
 }

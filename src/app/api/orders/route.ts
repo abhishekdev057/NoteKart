@@ -1,32 +1,66 @@
 import { NextResponse } from "next/server";
-import { createOrder, listOrders } from "@/lib/db";
+import { createOrder, decrementStock, getProductsByIds, listOrders } from "@/lib/db";
+import { requireAdmin, requireUser } from "@/lib/session";
+import { orderSchema } from "@/lib/validation";
+import { errorResponse } from "@/lib/http";
 
 export async function GET() {
   try {
+    await requireAdmin();
     return NextResponse.json({ orders: await listOrders() });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load orders." }, { status: 500 });
+    return errorResponse(error, "Unable to load orders.");
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const session = await requireUser();
+    const input = orderSchema.parse(await request.json());
+
+    // Look up real catalog prices — never trust client-supplied amounts.
+    const catalog = await getProductsByIds(input.items.map((item) => item.productId));
+
+    const lineItems: Array<{ productId: string; name: string; quantity: number; price: number }> = [];
+    for (const item of input.items) {
+      const product = catalog.get(item.productId);
+      if (!product) {
+        return NextResponse.json({ error: `Product no longer available.` }, { status: 409 });
+      }
+      if (product.stock < item.quantity) {
+        return NextResponse.json(
+          { error: `Only ${product.stock} left of ${product.name}.` },
+          { status: 409 },
+        );
+      }
+      lineItems.push({ productId: product.id, name: product.name, quantity: item.quantity, price: product.price });
+    }
+
+    const amount = lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+    // Reserve stock with guarded decrements; compensate if any line runs short
+    // (the http driver has no multi-statement transaction, so this is the
+    // pragmatic equivalent of a reservation).
+    const reserved: Array<{ productId: string; quantity: number }> = [];
+    for (const item of lineItems) {
+      const ok = await decrementStock(item.productId, item.quantity);
+      if (!ok) {
+        await Promise.all(reserved.map((r) => decrementStock(r.productId, -r.quantity)));
+        return NextResponse.json({ error: "Stock changed during checkout. Please retry." }, { status: 409 });
+      }
+      reserved.push({ productId: item.productId, quantity: item.quantity });
+    }
+
     const id = await createOrder({
-      customerName: String(body.customerName ?? "Customer"),
-      mobile: String(body.mobile ?? ""),
-      address: String(body.address ?? ""),
-      items: Array.isArray(body.items) ? body.items : [],
-      amount: Number(body.amount ?? 0),
-      shiprocketAwb: body.shiprocketAwb ? String(body.shiprocketAwb) : null,
-      deliveryProvider: body.deliveryProvider ? body.deliveryProvider : "review",
-      deliveryTrackingNumber: body.deliveryTrackingNumber ? String(body.deliveryTrackingNumber) : null,
-      deliveryNotes: body.deliveryNotes ? String(body.deliveryNotes) : null,
-      phonepePaymentId: body.phonepePaymentId ? String(body.phonepePaymentId) : null,
+      customerName: input.customerName,
+      mobile: session.mobile,
+      address: input.address,
+      items: lineItems,
+      amount,
     });
 
-    return NextResponse.json({ id });
+    return NextResponse.json({ id, amount });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to create order." }, { status: 500 });
+    return errorResponse(error, "Unable to create order.");
   }
 }

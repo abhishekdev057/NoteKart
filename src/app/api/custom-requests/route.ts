@@ -1,27 +1,37 @@
 import { NextResponse } from "next/server";
-import { createCustomRequest, listCustomRequests } from "@/lib/db";
+import { consumeRateLimit, createCustomRequest, listCustomRequests } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
+import { customRequestSchema } from "@/lib/validation";
+import { clientIp, errorResponse } from "@/lib/http";
 
 export async function GET() {
   try {
+    await requireAdmin();
     return NextResponse.json({ requests: await listCustomRequests() });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load requests." }, { status: 500 });
+    return errorResponse(error, "Unable to load requests.");
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    // Public lead form — rate limit to prevent spam.
+    const allowed = await consumeRateLimit(`custom:${clientIp(request)}`, 10, 3600);
+    if (!allowed) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
+
+    const input = customRequestSchema.parse(await request.json());
     const id = await createCustomRequest({
-      customerName: String(body.customerName ?? "Customer"),
-      mobile: String(body.mobile ?? ""),
-      notes: String(body.notes ?? ""),
-      quantity: Number(body.quantity ?? 1),
-      imageUrl: body.imageUrl ? String(body.imageUrl) : null,
+      customerName: input.customerName,
+      mobile: input.mobile,
+      notes: input.notes,
+      quantity: input.quantity,
+      imageUrl: input.imageUrl ?? null,
     });
 
     return NextResponse.json({ id });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to create request." }, { status: 500 });
+    return errorResponse(error, "Unable to create request.");
   }
 }

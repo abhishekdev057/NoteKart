@@ -37,7 +37,16 @@ type AdminPanelProps = {
   section?: AdminSection;
 };
 
-const adminSessionKey = "notekart_admin_auth";
+type Msg91VerifyData = Record<string, unknown>;
+
+declare global {
+  interface Window {
+    initSendOTP?: (configuration: Record<string, unknown>) => void;
+    sendOtp?: (identifier: string, success?: (data: unknown) => void, failure?: (error: unknown) => void) => void;
+    retryOtp?: (channel: string | null, success?: (data: unknown) => void, failure?: (error: unknown) => void, reqId?: string) => void;
+    verifyOtp?: (otp: string, success?: (data: unknown) => void, failure?: (error: unknown) => void, reqId?: string) => void;
+  }
+}
 
 const emptyProduct = {
   name: "",
@@ -72,9 +81,33 @@ function sectionTitle(section: AdminSection) {
   return adminLinks.find((link) => link.section === section)?.label ?? "Dashboard";
 }
 
+function msg91WidgetConfigured() {
+  return Boolean(process.env.NEXT_PUBLIC_MSG91_WIDGET_ID && process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN);
+}
+
+function msg91Identifier(mobile: string) {
+  return `91${mobile.replace(/\D/g, "").slice(-10)}`;
+}
+
+function extractMsg91AccessToken(data: unknown) {
+  if (!data || typeof data !== "object") return "";
+  const record = data as Msg91VerifyData;
+  const token =
+    record.token ??
+    record.accessToken ??
+    record.access_token ??
+    record["access-token"] ??
+    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData).token : undefined) ??
+    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData).accessToken : undefined) ??
+    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData)["access-token"] : undefined);
+  return typeof token === "string" ? token : "";
+}
+
 export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
+  const [otpStage, setOtpStage] = useState<"mobile" | "code">("mobile");
+  const [authBusy, setAuthBusy] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -99,14 +132,46 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   );
 
   useEffect(() => {
-    const hasAdminSession = window.sessionStorage.getItem(adminSessionKey) === "true";
-    queueMicrotask(() => {
-      if (hasAdminSession) {
-        setAuthorized(true);
-        void loadAdminData();
-      }
-      setCheckingSession(false);
-    });
+    let active = true;
+    fetch("/api/auth/session")
+      .then((response) => response.json())
+      .then((data) => {
+        if (!active) return;
+        if (data.user?.role === "admin") {
+          setAuthorized(true);
+          void loadAdminData();
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setCheckingSession(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!msg91WidgetConfigured() || window.sendOtp) return;
+    const configuration = {
+      widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
+      tokenAuth: process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN,
+      exposeMethods: true,
+      captchaRenderId: "",
+      success: () => {},
+      failure: () => {},
+    };
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://verify.msg91.com/otp-provider.js"]');
+    if (existing) {
+      existing.addEventListener("load", () => window.initSendOTP?.(configuration));
+      window.initSendOTP?.(configuration);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://verify.msg91.com/otp-provider.js";
+    script.async = true;
+    script.onload = () => window.initSendOTP?.(configuration);
+    document.body.appendChild(script);
   }, []);
 
   async function loadAdminData() {
@@ -122,26 +187,109 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     setAnalytics(await analyticsRes.json());
   }
 
-  async function login() {
+  async function requestOtp() {
     setLoginError("");
-    const response = await fetch("/api/auth/otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mobile, otp }),
-    });
-    const data = await response.json();
-    if (!response.ok || data.user?.role !== "admin") {
-      setLoginError(data.error ?? "Only registered admin mobile numbers can access this panel.");
-      return;
+    setAuthBusy(true);
+    try {
+      if (msg91WidgetConfigured()) {
+        if (!window.sendOtp) {
+          setLoginError("MSG91 OTP is loading. Please try again in a moment.");
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          window.sendOtp?.(msg91Identifier(mobile), () => resolve(), (error) => reject(error));
+        });
+        setOtpStage("code");
+        setLoginError("OTP sent to your mobile.");
+        return;
+      }
+
+      const response = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setLoginError(data.error ?? "Could not send OTP.");
+        return;
+      }
+      setOtpStage("code");
+      if (data.devCode) setLoginError(`Dev OTP: ${data.devCode}`);
+    } finally {
+      setAuthBusy(false);
     }
-    window.sessionStorage.setItem(adminSessionKey, "true");
-    await loadAdminData();
-    setAuthorized(true);
   }
 
-  function logout() {
-    window.sessionStorage.removeItem(adminSessionKey);
+  async function verifyOtp() {
+    setLoginError("");
+    setAuthBusy(true);
+    try {
+      if (msg91WidgetConfigured()) {
+        if (!window.verifyOtp) {
+          setLoginError("MSG91 OTP is still loading. Please try again.");
+          return;
+        }
+        const widgetData = await new Promise<unknown>((resolve, reject) => {
+          window.verifyOtp?.(otp, (data) => resolve(data), (error) => reject(error));
+        });
+        const accessToken = extractMsg91AccessToken(widgetData);
+        if (!accessToken) {
+          setLoginError("MSG91 verified OTP but did not return an access token.");
+          return;
+        }
+        const response = await fetch("/api/auth/msg91-widget/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mobile, accessToken }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setLoginError(data.error ?? "Could not create NoteKart session.");
+          return;
+        }
+        if (data.user?.role !== "admin") {
+          await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+          setLoginError("This mobile number is not registered as an admin.");
+          return;
+        }
+        setOtp("");
+        setOtpStage("mobile");
+        await loadAdminData();
+        setAuthorized(true);
+        return;
+      }
+
+      const response = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile, code: otp }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setLoginError(data.error ?? "Verification failed.");
+        return;
+      }
+      if (data.user?.role !== "admin") {
+        // Not an admin number — drop the just-created customer session.
+        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+        setLoginError("This mobile number is not registered as an admin.");
+        return;
+      }
+      setOtp("");
+      setOtpStage("mobile");
+      await loadAdminData();
+      setAuthorized(true);
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     setAuthorized(false);
+    setOtpStage("mobile");
+    setOtp("");
   }
 
   function parseSpecs(text: string) {
@@ -210,10 +358,51 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
         <section className="admin-login-card">
           <LockKeyhole size={34} />
           <h1>NoteKart Admin</h1>
-          <p>Use admin mobile 9256308961 or 9461217285 with OTP 0000, 1111, 2222 and so on.</p>
-          <input value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="Admin mobile number" />
-          <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="Four digit OTP" maxLength={4} />
-          <button className="primary-button justify-center" onClick={login}>Unlock admin panel</button>
+          <p>Enter your registered admin mobile number to receive a one-time password.</p>
+          {otpStage === "mobile" ? (
+            <>
+              <input
+                value={mobile}
+                onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="Admin mobile number"
+                inputMode="numeric"
+              />
+              <button
+                className="primary-button justify-center"
+                onClick={requestOtp}
+                disabled={authBusy || mobile.length !== 10}
+              >
+                {authBusy ? "Sending..." : "Send OTP"}
+              </button>
+            </>
+          ) : (
+            <>
+              <input
+                value={otp}
+                onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 8))}
+                placeholder="Enter OTP"
+                inputMode="numeric"
+                maxLength={8}
+              />
+              <button
+                className="primary-button justify-center"
+                onClick={verifyOtp}
+                disabled={authBusy || otp.length < 4}
+              >
+                {authBusy ? "Verifying..." : "Unlock admin panel"}
+              </button>
+              <button
+                className="secondary-button justify-center"
+                onClick={() => {
+                  setOtpStage("mobile");
+                  setOtp("");
+                  setLoginError("");
+                }}
+              >
+                Change number
+              </button>
+            </>
+          )}
           {loginError ? <span className="form-status">{loginError}</span> : null}
         </section>
       </main>

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/session";
+import { errorResponse } from "@/lib/http";
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const { waybill } = await request.json();
     const token = process.env.DELHIVERY_API_TOKEN;
     const environment = process.env.DELHIVERY_ENV === "production" ? "production" : "test";
@@ -37,6 +40,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ tracking });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to track Delhivery shipment." }, { status: 500 });
+    return errorResponse(error, "Unable to track Delhivery shipment.");
   }
 }
