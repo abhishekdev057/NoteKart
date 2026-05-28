@@ -45,6 +45,8 @@ declare global {
     sendOtp?: (identifier: string, success?: (data: unknown) => void, failure?: (error: unknown) => void) => void;
     retryOtp?: (channel: string | null, success?: (data: unknown) => void, failure?: (error: unknown) => void, reqId?: string) => void;
     verifyOtp?: (otp: string, success?: (data: unknown) => void, failure?: (error: unknown) => void, reqId?: string) => void;
+    getWidgetData?: () => unknown;
+    __notekartMsg91WidgetData?: unknown;
   }
 }
 
@@ -89,18 +91,23 @@ function msg91Identifier(mobile: string) {
   return `91${mobile.replace(/\D/g, "").slice(-10)}`;
 }
 
-function extractMsg91AccessToken(data: unknown) {
+function extractMsg91AccessToken(data: unknown): string {
+  if (typeof data === "string") return data.split(".").length === 3 ? data : "";
   if (!data || typeof data !== "object") return "";
   const record = data as Msg91VerifyData;
-  const token =
-    record.token ??
-    record.accessToken ??
-    record.access_token ??
-    record["access-token"] ??
-    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData).token : undefined) ??
-    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData).accessToken : undefined) ??
-    (record.data && typeof record.data === "object" ? (record.data as Msg91VerifyData)["access-token"] : undefined);
-  return typeof token === "string" ? token : "";
+  for (const [key, value] of Object.entries(record)) {
+    const normalizedKey = key.toLowerCase().replace(/[-_]/g, "");
+    if (typeof value === "string" && (normalizedKey.includes("token") || value.split(".").length === 3)) {
+      return value;
+    }
+    const nested = extractMsg91AccessToken(value);
+    if (nested) return nested;
+  }
+  return "";
+}
+
+function rememberMsg91WidgetData(data: unknown) {
+  window.__notekartMsg91WidgetData = data;
 }
 
 export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
@@ -158,7 +165,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
       tokenAuth: process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN,
       exposeMethods: true,
       captchaRenderId: "",
-      success: () => {},
+      success: rememberMsg91WidgetData,
       failure: () => {},
     };
     const existing = document.querySelector<HTMLScriptElement>('script[src="https://verify.msg91.com/otp-provider.js"]');
@@ -231,9 +238,15 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
           return;
         }
         const widgetData = await new Promise<unknown>((resolve, reject) => {
-          window.verifyOtp?.(otp, (data) => resolve(data), (error) => reject(error));
+          window.verifyOtp?.(otp, (data) => {
+            rememberMsg91WidgetData(data);
+            resolve(data);
+          }, (error) => reject(error));
         });
-        const accessToken = extractMsg91AccessToken(widgetData);
+        const accessToken =
+          extractMsg91AccessToken(widgetData) ||
+          extractMsg91AccessToken(window.__notekartMsg91WidgetData) ||
+          extractMsg91AccessToken(window.getWidgetData?.());
         if (!accessToken) {
           setLoginError("MSG91 verified OTP but did not return an access token.");
           return;
