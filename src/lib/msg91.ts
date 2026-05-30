@@ -52,15 +52,13 @@ export async function verifyMsg91WidgetAccessToken(accessToken: string, expected
   const authKey = process.env.MSG91_AUTH_KEY;
   if (!authKey) throw new Error("MSG91_AUTH_KEY is not configured.");
 
-  const body = new URLSearchParams({
-    authkey: authKey,
-    "access-token": accessToken,
-  });
-
+  // MSG91's verifyAccessToken endpoint only reads the access-token from a JSON
+  // body — sending it form-urlencoded makes the API respond with
+  // "access-token field is required.", so verification always failed.
   const response = await fetch("https://control.msg91.com/api/v5/widget/verifyAccessToken", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ authkey: authKey, "access-token": accessToken }),
   });
 
   const data = (await response.json().catch(() => ({}))) as Msg91VerifyResponse;
