@@ -15,8 +15,9 @@ export default function TermsAndConditionsPage() {
       </p>
       <h2>Payments</h2>
       <p>
-        Online payments are processed through PhonePe Payment Gateway. Customers must complete payment on PhonePe&apos;s
-        secure checkout page. NoteKart does not store card, UPI PIN, or wallet credentials.
+        Online payments are processed through NoteKart&apos;s active payment gateway, currently Cashfree unless the admin
+        changes it. Customers must complete payment on the secure checkout page. NoteKart does not store card, UPI PIN,
+        or wallet credentials.
       </p>
       <h2>Order acceptance</h2>
       <p>

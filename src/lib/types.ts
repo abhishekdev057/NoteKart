@@ -26,6 +26,7 @@ export type CustomRequest = {
 };
 
 export type DeliveryProvider = "review" | "delhivery" | "post_office" | "manual";
+export type PaymentGateway = "cashfree" | "phonepe" | "razorpay";
 
 export type Order = {
   id: string;
@@ -40,6 +41,8 @@ export type Order = {
   deliveryProvider?: DeliveryProvider | null;
   deliveryTrackingNumber?: string | null;
   deliveryNotes?: string | null;
+  paymentGateway?: PaymentGateway | null;
+  paymentReference?: string | null;
   phonepePaymentId?: string | null;
   createdAt?: string;
 };

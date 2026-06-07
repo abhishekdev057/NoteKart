@@ -15,13 +15,14 @@ import {
   Save,
   ShipWheel,
   ShoppingCart,
+  Smartphone,
   Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { CustomRequest, DeliveryProvider, Order, Product } from "@/lib/types";
+import type { CustomRequest, DeliveryProvider, Order, PaymentGateway, Product } from "@/lib/types";
 
 type AdminSection = "dashboard" | "products" | "custom-requests" | "orders" | "delivery" | "reports";
 
@@ -77,6 +78,12 @@ const deliveryProviders: Array<{ value: DeliveryProvider; label: string }> = [
   { value: "delhivery", label: "Delhivery" },
   { value: "post_office", label: "Post Office" },
   { value: "manual", label: "Manual/local" },
+];
+
+const gatewayOptions: Array<{ value: PaymentGateway; label: string; note: string }> = [
+  { value: "cashfree", label: "Cashfree", note: "Default checkout for live customer payments" },
+  { value: "phonepe", label: "PhonePe", note: "Available when PhonePe credentials are active" },
+  { value: "razorpay", label: "Razorpay", note: "Selectable placeholder until Razorpay keys are configured" },
 ];
 
 function sectionTitle(section: AdminSection) {
@@ -142,6 +149,8 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [uploadMessage, setUploadMessage] = useState("");
   const [trackingAwb, setTrackingAwb] = useState("");
   const [tracking, setTracking] = useState("");
+  const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>("cashfree");
+  const [paymentGatewayMessage, setPaymentGatewayMessage] = useState("");
 
   const chartData = useMemo(
     () => [
@@ -197,16 +206,38 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   }, []);
 
   async function loadAdminData() {
-    const [productRes, requestRes, orderRes, analyticsRes] = await Promise.all([
+    const [productRes, requestRes, orderRes, analyticsRes, gatewayRes] = await Promise.all([
       fetch("/api/products"),
       fetch("/api/custom-requests"),
       fetch("/api/orders"),
       fetch("/api/admin/analytics"),
+      fetch("/api/admin/payment-gateway"),
     ]);
     setProducts((await productRes.json()).products ?? []);
     setRequests((await requestRes.json()).requests ?? []);
     setOrders((await orderRes.json()).orders ?? []);
     setAnalytics(await analyticsRes.json());
+    if (gatewayRes.ok) {
+      const data = await gatewayRes.json();
+      setPaymentGateway(data.gateway ?? "cashfree");
+    }
+  }
+
+  async function savePaymentGateway(gateway: PaymentGateway) {
+    setPaymentGateway(gateway);
+    setPaymentGatewayMessage("Saving payment gateway...");
+    const response = await fetch("/api/admin/payment-gateway", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gateway }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setPaymentGatewayMessage(data.error ?? "Could not update payment gateway.");
+      return;
+    }
+    setPaymentGateway(data.gateway ?? gateway);
+    setPaymentGatewayMessage(`${data.label ?? "Gateway"} is now active for checkout.`);
   }
 
   async function requestOtp() {
@@ -472,8 +503,25 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
           </div>
         </div>
 
-        {section === "dashboard" ? <Dashboard analytics={analytics} orders={orders} requests={requests} /> : null}
-        {section === "reports" ? <Reports chartData={chartData} analytics={analytics} /> : null}
+        {section === "dashboard" ? (
+          <Dashboard
+            analytics={analytics}
+            orders={orders}
+            requests={requests}
+            paymentGateway={paymentGateway}
+            paymentGatewayMessage={paymentGatewayMessage}
+            onPaymentGatewayChange={savePaymentGateway}
+          />
+        ) : null}
+        {section === "reports" ? (
+          <Reports
+            chartData={chartData}
+            analytics={analytics}
+            paymentGateway={paymentGateway}
+            paymentGatewayMessage={paymentGatewayMessage}
+            onPaymentGatewayChange={savePaymentGateway}
+          />
+        ) : null}
         {section === "products" ? (
           <ProductsPanel
             form={form}
@@ -526,7 +574,21 @@ function adminHeadline(section: AdminSection) {
   return titles[section];
 }
 
-function Dashboard({ analytics, orders, requests }: { analytics: Analytics | null; orders: Order[]; requests: CustomRequest[] }) {
+function Dashboard({
+  analytics,
+  orders,
+  requests,
+  paymentGateway,
+  paymentGatewayMessage,
+  onPaymentGatewayChange,
+}: {
+  analytics: Analytics | null;
+  orders: Order[];
+  requests: CustomRequest[];
+  paymentGateway: PaymentGateway;
+  paymentGatewayMessage: string;
+  onPaymentGatewayChange: (gateway: PaymentGateway) => Promise<void>;
+}) {
   const pendingDelivery = orders.filter((order) => order.deliveryProvider === "review").length;
   return (
     <section className="admin-section-stack">
@@ -561,39 +623,96 @@ function Dashboard({ analytics, orders, requests }: { analytics: Analytics | nul
           <Link className="primary-button justify-center" href="/admin/delivery">Open delivery review</Link>
         </div>
       </section>
+      <PaymentGatewayPanel
+        paymentGateway={paymentGateway}
+        message={paymentGatewayMessage}
+        onChange={onPaymentGatewayChange}
+      />
     </section>
   );
 }
 
-function Reports({ chartData, analytics }: { chartData: Array<{ name: string; value: number }>; analytics: Analytics | null }) {
+function Reports({
+  chartData,
+  analytics,
+  paymentGateway,
+  paymentGatewayMessage,
+  onPaymentGatewayChange,
+}: {
+  chartData: Array<{ name: string; value: number }>;
+  analytics: Analytics | null;
+  paymentGateway: PaymentGateway;
+  paymentGatewayMessage: string;
+  onPaymentGatewayChange: (gateway: PaymentGateway) => Promise<void>;
+}) {
+  return (
+    <section className="admin-section-stack">
+      <section className="admin-panel">
+        <div className="panel-title">
+          <BarChart3 size={20} />
+          <h2>Reports and analysis</h2>
+        </div>
+        <div className="admin-report-summary">
+          <span>Revenue ₹{analytics?.revenue ?? 0}</span>
+          <span>{analytics?.stock ?? 0} notebooks in stock</span>
+          <span>{analytics?.orderCount ?? 0} total orders</span>
+        </div>
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="notekartChart" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#0c8f84" stopOpacity={0.55} />
+                  <stop offset="100%" stopColor="#0c8f84" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#ded6c4" vertical={false} />
+              <XAxis dataKey="name" tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} />
+              <Tooltip />
+              <Area type="monotone" dataKey="value" stroke="#0c8f84" fill="url(#notekartChart)" strokeWidth={3} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+      <PaymentGatewayPanel
+        paymentGateway={paymentGateway}
+        message={paymentGatewayMessage}
+        onChange={onPaymentGatewayChange}
+      />
+    </section>
+  );
+}
+
+function PaymentGatewayPanel({
+  paymentGateway,
+  message,
+  onChange,
+}: {
+  paymentGateway: PaymentGateway;
+  message: string;
+  onChange: (gateway: PaymentGateway) => Promise<void>;
+}) {
   return (
     <section className="admin-panel">
       <div className="panel-title">
-        <BarChart3 size={20} />
-        <h2>Reports and analysis</h2>
+        <Smartphone size={20} />
+        <h2>Payment gateway</h2>
       </div>
-      <div className="admin-report-summary">
-        <span>Revenue ₹{analytics?.revenue ?? 0}</span>
-        <span>{analytics?.stock ?? 0} notebooks in stock</span>
-        <span>{analytics?.orderCount ?? 0} total orders</span>
+      <div className="gateway-grid">
+        {gatewayOptions.map((option) => (
+          <button
+            className={`gateway-option ${paymentGateway === option.value ? "active" : ""}`}
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+          >
+            <strong>{option.label}</strong>
+            <span>{option.note}</span>
+          </button>
+        ))}
       </div>
-      <div className="h-72">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient id="notekartChart" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#0c8f84" stopOpacity={0.55} />
-                <stop offset="100%" stopColor="#0c8f84" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="#ded6c4" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} />
-            <Tooltip />
-            <Area type="monotone" dataKey="value" stroke="#0c8f84" fill="url(#notekartChart)" strokeWidth={3} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      {message ? <span className="form-status">{message}</span> : null}
     </section>
   );
 }
@@ -699,7 +818,7 @@ function OrdersPanel({ orders }: { orders: Order[] }) {
               <span>{order.mobile} · {order.items.length} item lines · {order.address}</span>
               <span>{order.paymentStatus} payment · {formatProvider(order.deliveryProvider)} · {order.deliveryStatus}</span>
             </div>
-            <span className="admin-pill">{order.phonepePaymentId ?? "No payment id"}</span>
+            <span className="admin-pill">{order.paymentReference ?? order.phonepePaymentId ?? "No payment id"}</span>
           </div>
         ))}
       </div>

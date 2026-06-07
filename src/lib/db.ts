@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless";
-import type { CustomRequest, Order, Product } from "./types";
+import { normalizePaymentGateway } from "./payments";
+import type { CustomRequest, Order, PaymentGateway, Product } from "./types";
 
 type SqlClient = ReturnType<typeof neon>;
 type DbRow = Record<string, unknown>;
@@ -117,15 +118,26 @@ async function ensureSchema() {
       delivery_provider TEXT NOT NULL DEFAULT 'review',
       delivery_tracking_number TEXT,
       delivery_notes TEXT,
+      payment_gateway TEXT NOT NULL DEFAULT 'cashfree',
+      payment_reference TEXT,
       phonepe_payment_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
 
   await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS phonepe_payment_id TEXT`;
+  await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_gateway TEXT NOT NULL DEFAULT 'cashfree'`;
+  await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_reference TEXT`;
   await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_provider TEXT NOT NULL DEFAULT 'review'`;
   await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_tracking_number TEXT`;
   await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_notes TEXT`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS otp_codes (
@@ -248,12 +260,13 @@ export async function createOrder(order: Omit<Order, "id" | "paymentStatus" | "d
   await getSql()`
     INSERT INTO orders (
       id, customer_name, mobile, address, items, amount, shiprocket_awb,
-      delivery_provider, delivery_tracking_number, delivery_notes, phonepe_payment_id
+      delivery_provider, delivery_tracking_number, delivery_notes, payment_gateway, payment_reference, phonepe_payment_id
     )
     VALUES (
       ${id}, ${order.customerName}, ${order.mobile}, ${order.address}, ${JSON.stringify(order.items)}::jsonb,
       ${order.amount}, ${order.shiprocketAwb ?? null}, ${order.deliveryProvider ?? "review"},
-      ${order.deliveryTrackingNumber ?? null}, ${order.deliveryNotes ?? null}, ${order.phonepePaymentId ?? null}
+      ${order.deliveryTrackingNumber ?? null}, ${order.deliveryNotes ?? null},
+      ${order.paymentGateway ?? "cashfree"}, ${order.paymentReference ?? null}, ${order.phonepePaymentId ?? null}
     )
   `;
   return id;
@@ -273,6 +286,8 @@ function rowToOrder(row: DbRow): Order {
     deliveryProvider: row.delivery_provider ? (String(row.delivery_provider) as Order["deliveryProvider"]) : "review",
     deliveryTrackingNumber: row.delivery_tracking_number ? String(row.delivery_tracking_number) : null,
     deliveryNotes: row.delivery_notes ? String(row.delivery_notes) : null,
+    paymentGateway: row.payment_gateway ? normalizePaymentGateway(row.payment_gateway) : "cashfree",
+    paymentReference: row.payment_reference ? String(row.payment_reference) : null,
     phonepePaymentId: row.phonepe_payment_id ? String(row.phonepe_payment_id) : null,
     createdAt: row.created_at ? String(row.created_at) : undefined,
   };
@@ -304,8 +319,17 @@ export async function updateOrderPaymentStatusByPhonePe(phonepePaymentId: string
   await readyDb();
   await getSql()`
     UPDATE orders
-    SET payment_status = ${paymentStatus}
+    SET payment_status = ${paymentStatus}, payment_gateway = 'phonepe', payment_reference = ${phonepePaymentId}
     WHERE phonepe_payment_id = ${phonepePaymentId}
+  `;
+}
+
+export async function updateOrderPaymentStatusByReference(paymentReference: string, paymentStatus: string) {
+  await readyDb();
+  await getSql()`
+    UPDATE orders
+    SET payment_status = ${paymentStatus}
+    WHERE payment_reference = ${paymentReference}
   `;
 }
 
@@ -328,9 +352,43 @@ export async function getOrderByPhonePeId(phonepePaymentId: string) {
   return rows[0] ? rowToOrder(rows[0]) : null;
 }
 
+export async function getOrderByPaymentReference(paymentReference: string) {
+  await readyDb();
+  const rows = (await getSql()`SELECT * FROM orders WHERE payment_reference = ${paymentReference} LIMIT 1`) as DbRow[];
+  return rows[0] ? rowToOrder(rows[0]) : null;
+}
+
 export async function setOrderPhonePeId(id: string, phonepePaymentId: string) {
   await readyDb();
-  await getSql()`UPDATE orders SET phonepe_payment_id = ${phonepePaymentId} WHERE id = ${id}`;
+  await getSql()`
+    UPDATE orders
+    SET phonepe_payment_id = ${phonepePaymentId}, payment_gateway = 'phonepe', payment_reference = ${phonepePaymentId}
+    WHERE id = ${id}
+  `;
+}
+
+export async function setOrderPaymentReference(id: string, paymentGateway: PaymentGateway, paymentReference: string) {
+  await readyDb();
+  await getSql()`
+    UPDATE orders
+    SET payment_gateway = ${paymentGateway}, payment_reference = ${paymentReference}
+    WHERE id = ${id}
+  `;
+}
+
+export async function getActivePaymentGateway() {
+  await readyDb();
+  const rows = (await getSql()`SELECT value FROM site_settings WHERE key = 'payment_gateway' LIMIT 1`) as DbRow[];
+  return normalizePaymentGateway(rows[0]?.value ?? process.env.PAYMENT_GATEWAY);
+}
+
+export async function setActivePaymentGateway(paymentGateway: PaymentGateway) {
+  await readyDb();
+  await getSql()`
+    INSERT INTO site_settings (key, value, updated_at)
+    VALUES ('payment_gateway', ${paymentGateway}, now())
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+  `;
 }
 
 /** Decrement stock only when enough is available. Returns true if it succeeded. */

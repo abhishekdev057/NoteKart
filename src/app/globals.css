@@ -1435,6 +1435,39 @@ img {
   font-size: 13px;
 }
 
+.gateway-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.gateway-option {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid rgba(23, 19, 15, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 253, 247, 0.72);
+  padding: 14px;
+  text-align: left;
+}
+
+.gateway-option.active {
+  border-color: rgba(12, 143, 132, 0.55);
+  background: rgba(12, 143, 132, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(12, 143, 132, 0.14);
+}
+
+.gateway-option strong {
+  font-size: 16px;
+}
+
+.gateway-option span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .admin-report-summary {
   display: grid;
   gap: 10px;

@@ -19,8 +19,8 @@ export default function PrivacyPolicyPage() {
       </p>
       <h2>Payments</h2>
       <p>
-        Payments are handled by PhonePe Payment Gateway. NoteKart does not store sensitive payment credentials such as
-        card numbers, CVV, UPI PIN, or wallet passwords.
+        Payments are handled by the active payment gateway selected by NoteKart, currently Cashfree by default. NoteKart
+        does not store sensitive payment credentials such as card numbers, CVV, UPI PIN, or wallet passwords.
       </p>
       <h2>Data sharing</h2>
       <p>

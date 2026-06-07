@@ -43,6 +43,9 @@ declare global {
     verifyOtp?: (otp: string, success?: (data: unknown) => void, failure?: (error: unknown) => void, reqId?: string) => void;
     getWidgetData?: () => unknown;
     __notekartMsg91WidgetData?: unknown;
+    Cashfree?: (config: { mode: "sandbox" | "production" }) => {
+      checkout: (options: { paymentSessionId: string; redirectTarget: "_self" | "_blank" | "_modal" }) => Promise<unknown>;
+    };
   }
 }
 
@@ -138,6 +141,25 @@ function extractMsg91ReqId(data: unknown): string {
 
 function rememberMsg91WidgetData(data: unknown) {
   window.__notekartMsg91WidgetData = data;
+}
+
+function loadCashfreeSdk() {
+  if (window.Cashfree) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://sdk.cashfree.com/js/v3/cashfree.js"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Cashfree SDK failed to load.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Cashfree SDK failed to load."));
+    document.body.appendChild(script);
+  });
 }
 
 function QuantityStepper({
@@ -465,8 +487,8 @@ export function Storefront({ products }: { products: Product[] }) {
     }
 
     // 2. Start payment for that order; the amount is taken from the stored order.
-    setCheckoutMessage("Creating PhonePe payment...");
-    const paymentResponse = await fetch("/api/payments/phonepe", {
+    setCheckoutMessage("Creating payment...");
+    const paymentResponse = await fetch("/api/payments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderId: order.id }),
@@ -477,14 +499,26 @@ export function Storefront({ products }: { products: Product[] }) {
       return;
     }
 
+    if (payment.gateway === "cashfree" && payment.paymentSessionId) {
+      setCheckoutMessage("Opening Cashfree checkout...");
+      try {
+        await loadCashfreeSdk();
+        const cashfree = window.Cashfree?.({ mode: payment.mode === "production" ? "production" : "sandbox" });
+        await cashfree?.checkout({ paymentSessionId: payment.paymentSessionId, redirectTarget: "_self" });
+      } catch {
+        setCheckoutMessage("Cashfree checkout could not open. Please try again.");
+      }
+      return;
+    }
+
     if (payment.redirectUrl) {
       window.location.href = payment.redirectUrl;
       return;
     }
     setCheckoutMessage(
       payment.mock
-        ? `Demo PhonePe order ${payment.merchantOrderId} created. Add PhonePe credentials to enable live checkout.`
-        : "PhonePe payment created.",
+        ? `Demo ${payment.label ?? "payment"} order ${payment.paymentReference ?? ""} created. Add gateway credentials to enable live checkout.`
+        : `${payment.label ?? "Payment"} created.`,
     );
   }
 
@@ -582,7 +616,7 @@ export function Storefront({ products }: { products: Product[] }) {
             <div className="ruler-rail" />
             <div className="floating-card top-8 right-0">
               <Smartphone size={18} />
-              PhonePe ready
+              Cashfree ready
             </div>
             <div className="floating-card bottom-8 left-0">
               <Boxes size={18} />

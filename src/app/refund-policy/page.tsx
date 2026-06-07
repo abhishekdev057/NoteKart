@@ -19,8 +19,8 @@ export default function RefundPolicyPage() {
       </p>
       <h2>Timeline</h2>
       <p>
-        Approved refunds are initiated to the original payment method through PhonePe or the relevant banking channel.
-        Bank processing timelines may vary.
+        Approved refunds are initiated to the original payment method through the active payment gateway or the relevant
+        banking channel. Bank processing timelines may vary.
       </p>
     </PolicyPage>
   );
