@@ -986,12 +986,12 @@ export function Storefront({ products }: { products: Product[] }) {
       {cartOpen ? (
         <aside className="drawer">
           <button className="drawer-backdrop" onClick={() => setCartOpen(false)} aria-label="Close cart" />
-          <div className="drawer-panel">
+          <div className="drawer-panel cart-drawer-panel">
             <div className="drawer-head">
               <h2>Cart</h2>
               <button className="icon-button" onClick={() => setCartOpen(false)}><X size={18} /></button>
             </div>
-            <div className="space-y-3">
+            <div className="cart-items-scroll space-y-3">
               {cart.length ? (
                 cart.map((item) => (
                   <div className="cart-row" key={item.id}>
@@ -1016,7 +1016,7 @@ export function Storefront({ products }: { products: Product[] }) {
                 </div>
               )}
             </div>
-            <div className="mt-auto border-t border-black/10 pt-5">
+            <div className="cart-checkout-panel">
               <div className="mb-4 flex justify-between text-lg font-semibold">
                 <span>Total</span>
                 <span>₹{total}</span>
@@ -1072,8 +1072,8 @@ export function Storefront({ products }: { products: Product[] }) {
                         placeholder="Landmark optional"
                       />
                     </div>
-                    <button className="primary-button justify-center" onClick={checkout} disabled={!cart.length}>
-                      Pay and place order <ArrowRight size={18} />
+                    <button className="primary-button justify-center place-order-button" onClick={checkout} disabled={!cart.length}>
+                      Place my order <ArrowRight size={18} />
                     </button>
                   </form>
                 ) : (
