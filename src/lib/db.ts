@@ -299,6 +299,12 @@ export async function listOrders() {
   return rows.map(rowToOrder);
 }
 
+export async function listOrdersByMobile(mobile: string) {
+  await readyDb();
+  const rows = (await getSql()`SELECT * FROM orders WHERE mobile = ${mobile} ORDER BY created_at DESC`) as DbRow[];
+  return rows.map(rowToOrder);
+}
+
 export async function updateOrderDelivery(
   id: string,
   delivery: Pick<Order, "deliveryProvider" | "deliveryTrackingNumber" | "deliveryStatus" | "deliveryNotes">,

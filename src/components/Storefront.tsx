@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import {
+  AlertCircle,
   ArrowRight,
   Boxes,
   Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   ImagePlus,
   LockKeyhole,
   MapPin,
@@ -19,11 +22,13 @@ import {
   ShoppingBag,
   Sparkles,
   Smartphone,
+  Truck,
   Upload,
   UserRound,
   X,
+  XCircle,
 } from "lucide-react";
-import type { Product } from "@/lib/types";
+import type { Order, Product } from "@/lib/types";
 
 type CartItem = Product & { quantity: number };
 const CART_STORAGE_KEY = "notekart:guest-cart";
@@ -34,6 +39,7 @@ let cachedCartSnapshot: CartItem[] = EMPTY_CART;
 
 type CustomerUser = { mobile: string; role: string };
 type Msg91VerifyData = Record<string, unknown>;
+type CustomerOrder = Order;
 
 declare global {
   interface Window {
@@ -186,9 +192,84 @@ function QuantityStepper({
   );
 }
 
+function orderPaymentLabel(status: string) {
+  const value = status.toLowerCase();
+  if (value === "paid") return "Payment successful";
+  if (["failed", "cancelled", "amount_mismatch"].includes(value)) return "Payment issue";
+  return "Payment pending";
+}
+
+function orderTone(status: string) {
+  const value = status.toLowerCase();
+  if (value === "paid" || value === "delivered") return "success";
+  if (["failed", "cancelled", "amount_mismatch"].includes(value)) return "danger";
+  return "pending";
+}
+
+function deliveryLabel(order: CustomerOrder) {
+  if (order.deliveryStatus === "delivered") return "Delivered";
+  if (order.deliveryStatus === "shipped") return "Shipped";
+  if (order.deliveryStatus === "assigned") return "Delivery assigned";
+  if (order.deliveryStatus === "packed") return "Packed";
+  return "Under review";
+}
+
+function providerLabel(provider?: string | null) {
+  if (provider === "delhivery") return "Delhivery";
+  if (provider === "post_office") return "Post Office";
+  if (provider === "manual") return "Local/manual";
+  return "Review first";
+}
+
+function formatOrderDate(value?: string) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function buildOrderTimeline(order: CustomerOrder) {
+  const paymentTone = orderTone(order.paymentStatus);
+  const deliveryTone = order.deliveryStatus === "delivered" ? "success" : order.paymentStatus === "paid" ? "pending" : "muted";
+  return [
+    {
+      title: "Order placed",
+      body: formatOrderDate(order.createdAt) || "Order created in NoteKart",
+      tone: "success",
+      icon: CheckCircle2,
+    },
+    {
+      title: orderPaymentLabel(order.paymentStatus),
+      body:
+        order.paymentStatus === "paid"
+          ? `${order.paymentGateway ?? "payment"} reference ${order.paymentReference ?? order.phonepePaymentId ?? "saved"}`
+          : "We will show success, failed, or cancelled here after gateway confirmation.",
+      tone: paymentTone,
+      icon: paymentTone === "danger" ? XCircle : paymentTone === "success" ? CheckCircle2 : Clock3,
+    },
+    {
+      title: order.paymentStatus === "paid" ? "Production review" : "Waiting for confirmed payment",
+      body: order.paymentStatus === "paid" ? "Notebook details are ready for packing or production review." : "Production starts after payment is confirmed.",
+      tone: order.paymentStatus === "paid" ? "pending" : "muted",
+      icon: AlertCircle,
+    },
+    {
+      title: deliveryLabel(order),
+      body: `${providerLabel(order.deliveryProvider)}${order.deliveryTrackingNumber ? ` · ${order.deliveryTrackingNumber}` : ""}`,
+      tone: deliveryTone,
+      icon: Truck,
+    },
+  ];
+}
+
 export function Storefront({ products }: { products: Product[] }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [ordersOpen, setOrdersOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const cart = useSyncExternalStore(subscribeCart, readStoredCartSnapshot, getServerCartSnapshot);
   const [selected, setSelected] = useState<Product>(products[0]);
@@ -212,6 +293,9 @@ export function Storefront({ products }: { products: Product[] }) {
   const [customStatus, setCustomStatus] = useState("");
   const [customSubmitted, setCustomSubmitted] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState("");
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersMessage, setOrdersMessage] = useState("");
   const { scrollYProgress } = useScroll();
   const heroLift = useTransform(scrollYProgress, [0, 0.35], [0, -90]);
   const heroTilt = useTransform(scrollYProgress, [0, 0.35], [0, -7]);
@@ -400,9 +484,42 @@ export function Storefront({ products }: { products: Product[] }) {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     setUser(null);
+    setOrders([]);
+    setOrdersOpen(false);
     setOtpStage("mobile");
     setOtp("");
     setAuthMessage("You are logged out.");
+  }
+
+  async function loadCustomerOrders() {
+    if (!user) {
+      setAuthOpen(true);
+      return;
+    }
+    setOrdersLoading(true);
+    setOrdersMessage("");
+    try {
+      const response = await fetch("/api/orders/me", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        setOrdersMessage(data.error ?? "Could not load your orders.");
+        return;
+      }
+      setOrders(data.orders ?? []);
+    } catch {
+      setOrdersMessage("Could not connect to your orders.");
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
+
+  function openOrders() {
+    if (!user) {
+      setAuthOpen(true);
+      return;
+    }
+    setOrdersOpen(true);
+    void loadCustomerOrders();
   }
 
   function formattedAddress() {
@@ -544,6 +661,11 @@ export function Storefront({ products }: { products: Product[] }) {
             <button className="icon-button" aria-label="Account" onClick={() => setAuthOpen(true)}>
               <UserRound size={18} />
             </button>
+            {user ? (
+              <button className="icon-button" aria-label="My orders" onClick={openOrders}>
+                <Boxes size={18} />
+              </button>
+            ) : null}
             <button className="cart-button" onClick={() => setCartOpen(true)}>
               <ShoppingBag size={18} />
               <span>{cartCount}</span>
@@ -988,7 +1110,12 @@ export function Storefront({ products }: { products: Product[] }) {
                   : "Enter your mobile number to receive a one-time password by SMS."}
               </p>
               {user ? (
-                <button className="secondary-button justify-center" onClick={logout}>Logout</button>
+                <div className="account-actions">
+                  <button className="primary-button justify-center" onClick={openOrders}>
+                    My orders <Boxes size={18} />
+                  </button>
+                  <button className="secondary-button justify-center" onClick={logout}>Logout</button>
+                </div>
               ) : otpStage === "mobile" ? (
                 <>
                   <input
@@ -1031,6 +1158,80 @@ export function Storefront({ products }: { products: Product[] }) {
         </aside>
       ) : null}
 
+      {ordersOpen ? (
+        <aside className="drawer">
+          <button className="drawer-backdrop" onClick={() => setOrdersOpen(false)} aria-label="Close orders" />
+          <div className="drawer-panel orders-panel">
+            <div className="drawer-head">
+              <div>
+                <h2>Your orders</h2>
+                <p className="drawer-subtitle">All purchases, payment results and delivery updates for {user?.mobile}</p>
+              </div>
+              <button className="icon-button" onClick={() => setOrdersOpen(false)}><X size={18} /></button>
+            </div>
+            <button className="secondary-button justify-center" onClick={loadCustomerOrders} disabled={ordersLoading}>
+              {ordersLoading ? "Refreshing..." : "Refresh orders"}
+            </button>
+            {ordersMessage ? <p className="form-status">{ordersMessage}</p> : null}
+            <div className="orders-list">
+              {ordersLoading && !orders.length ? (
+                <div className="empty-cart">
+                  <Clock3 size={28} />
+                  <strong>Loading your orders</strong>
+                  <span>Checking your NoteKart order history.</span>
+                </div>
+              ) : orders.length ? (
+                orders.map((order) => (
+                  <article className={`customer-order-card ${orderTone(order.paymentStatus)}`} key={order.id}>
+                    <div className="customer-order-head">
+                      <div>
+                        <strong>Order #{order.id.slice(0, 8)}</strong>
+                        <span>{formatOrderDate(order.createdAt)}</span>
+                      </div>
+                      <div className="customer-order-amount">
+                        <strong>₹{order.amount}</strong>
+                        <span>{orderPaymentLabel(order.paymentStatus)}</span>
+                      </div>
+                    </div>
+                    <div className="customer-order-items">
+                      {order.items.map((item) => (
+                        <span key={`${order.id}-${item.productId}`}>
+                          {item.quantity} x {item.name}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="customer-order-meta">
+                      <span>{deliveryLabel(order)}</span>
+                      <span>{providerLabel(order.deliveryProvider)}</span>
+                      {order.deliveryTrackingNumber ? <span>Tracking: {order.deliveryTrackingNumber}</span> : null}
+                    </div>
+                    <div className="order-timeline">
+                      {buildOrderTimeline(order).map(({ title, body, tone, icon: Icon }) => (
+                        <div className={`order-timeline-step ${tone}`} key={title}>
+                          <div className="order-timeline-icon">
+                            <Icon size={16} />
+                          </div>
+                          <div>
+                            <strong>{title}</strong>
+                            <span>{body}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="empty-cart">
+                  <ShoppingBag size={28} />
+                  <strong>No orders yet</strong>
+                  <span>Your successful, pending, failed, or cancelled orders will appear here after checkout starts.</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+      ) : null}
+
       {mobileNavOpen ? (
         <aside className="drawer">
           <button className="drawer-backdrop" onClick={() => setMobileNavOpen(false)} aria-label="Close menu" />
@@ -1044,6 +1245,9 @@ export function Storefront({ products }: { products: Product[] }) {
                 {label}
               </a>
             ))}
+            <button className="mobile-link text-left" onClick={openOrders}>
+              My orders
+            </button>
           </div>
         </aside>
       ) : null}
