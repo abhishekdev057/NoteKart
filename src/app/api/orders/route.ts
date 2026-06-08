@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkDelhiveryServiceability, extractPincode } from "@/lib/delhivery";
 import { createOrder, decrementStock, getProductsByIds, listOrders } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { orderSchema } from "@/lib/validation";
@@ -17,6 +18,17 @@ export async function POST(request: Request) {
   try {
     const session = await requireUser();
     const input = orderSchema.parse(await request.json());
+    const pincode = extractPincode(input.address);
+    const serviceability = await checkDelhiveryServiceability(pincode);
+    if (!serviceability.serviceable) {
+      return NextResponse.json(
+        {
+          error: serviceability.message || "Your area is not serviceable by Delhivery right now. Please try another location.",
+          serviceability,
+        },
+        { status: 422 },
+      );
+    }
 
     // Look up real catalog prices — never trust client-supplied amounts.
     const catalog = await getProductsByIds(input.items.map((item) => item.productId));

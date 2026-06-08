@@ -40,6 +40,15 @@ let cachedCartSnapshot: CartItem[] = EMPTY_CART;
 type CustomerUser = { mobile: string; role: string };
 type Msg91VerifyData = Record<string, unknown>;
 type CustomerOrder = Order;
+type ServiceabilityState = {
+  status: "idle" | "checking" | "serviceable" | "unserviceable" | "error";
+  message: string;
+};
+type TrackingState = {
+  loading?: boolean;
+  message?: string;
+  scans?: string[];
+};
 
 declare global {
   interface Window {
@@ -266,6 +275,31 @@ function buildOrderTimeline(order: CustomerOrder) {
   ];
 }
 
+function extractTrackingScans(payload: unknown): string[] {
+  const scans: string[] = [];
+  const visit = (value: unknown) => {
+    if (!value || scans.length > 8) return;
+    if (typeof value === "string") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    const text =
+      record.scan_detail ??
+      record.status ??
+      record.current_status ??
+      record.Instructions ??
+      record.Scan ??
+      record.scan;
+    if (typeof text === "string" && text.trim()) scans.push(text.trim());
+    Object.values(record).forEach(visit);
+  };
+  visit(payload);
+  return Array.from(new Set(scans)).slice(0, 6);
+}
+
 export function Storefront({ products }: { products: Product[] }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -296,6 +330,8 @@ export function Storefront({ products }: { products: Product[] }) {
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersMessage, setOrdersMessage] = useState("");
+  const [trackingByOrder, setTrackingByOrder] = useState<Record<string, TrackingState>>({});
+  const [serviceability, setServiceability] = useState<ServiceabilityState>({ status: "idle", message: "" });
   const { scrollYProgress } = useScroll();
   const heroLift = useTransform(scrollYProgress, [0, 0.35], [0, -90]);
   const heroTilt = useTransform(scrollYProgress, [0, 0.35], [0, -7]);
@@ -341,6 +377,44 @@ export function Storefront({ products }: { products: Product[] }) {
     script.onload = () => window.initSendOTP?.(configuration);
     document.body.appendChild(script);
   }, []);
+
+  useEffect(() => {
+    const pincode = checkoutAddress.pincode;
+    if (pincode.length !== 6) {
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      if (!active) return;
+      setServiceability({ status: "checking", message: "Checking Delhivery availability..." });
+      try {
+        const response = await fetch(`/api/delhivery/serviceability?pincode=${pincode}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!active) return;
+        setServiceability({
+          status: response.ok && data.serviceable ? "serviceable" : "unserviceable",
+          message:
+            data.message ??
+            (response.ok
+              ? "Delivery is available for this pincode."
+              : "Your area is not serviceable right now. Please try another location."),
+        });
+      } catch {
+        if (active) {
+          setServiceability({
+            status: "error",
+            message: "Could not check delivery availability. Please retry.",
+          });
+        }
+      }
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [checkoutAddress.pincode]);
 
   const categories = useMemo(
     () => ["All", ...Array.from(new Set(products.map((product) => product.category)))],
@@ -522,6 +596,49 @@ export function Storefront({ products }: { products: Product[] }) {
     void loadCustomerOrders();
   }
 
+  async function checkDeliveryAvailabilityNow(pincode: string) {
+    setServiceability({ status: "checking", message: "Checking Delhivery availability..." });
+    try {
+      const response = await fetch(`/api/delhivery/serviceability?pincode=${pincode}`, { cache: "no-store" });
+      const data = await response.json();
+      const next: ServiceabilityState = {
+        status: response.ok && data.serviceable ? "serviceable" : "unserviceable",
+        message:
+          data.message ??
+          (response.ok
+            ? "Delivery is available for this pincode."
+            : "Your area is not serviceable right now. Please try another location."),
+      };
+      setServiceability(next);
+      return next.status === "serviceable";
+    } catch {
+      setServiceability({ status: "error", message: "Could not check delivery availability. Please retry." });
+      return false;
+    }
+  }
+
+  async function loadOrderTracking(orderId: string) {
+    setTrackingByOrder((current) => ({ ...current, [orderId]: { loading: true, message: "Checking latest Delhivery tracking..." } }));
+    try {
+      const response = await fetch(`/api/orders/${orderId}/tracking`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        setTrackingByOrder((current) => ({ ...current, [orderId]: { message: data.error ?? "Could not load tracking." } }));
+        return;
+      }
+      const scans = extractTrackingScans(data.tracking);
+      setTrackingByOrder((current) => ({
+        ...current,
+        [orderId]: {
+          message: scans.length ? "Latest Delhivery updates" : "Tracking is assigned. Detailed scans will appear after courier movement.",
+          scans,
+        },
+      }));
+    } catch {
+      setTrackingByOrder((current) => ({ ...current, [orderId]: { message: "Could not connect to tracking service." } }));
+    }
+  }
+
   function formattedAddress() {
     return [
       checkoutAddress.line1,
@@ -582,6 +699,11 @@ export function Storefront({ products }: { products: Product[] }) {
     }
     if (!checkoutAddress.customerName.trim() || !checkoutAddress.line1.trim() || checkoutAddress.pincode.trim().length < 6) {
       setCheckoutMessage("Please fill your name, full address, and 6 digit pincode.");
+      return;
+    }
+    const canDeliver = await checkDeliveryAvailabilityNow(checkoutAddress.pincode);
+    if (!canDeliver) {
+      setCheckoutMessage("Your area is not serviceable right now. Please try another location before checkout.");
       return;
     }
     setCheckoutMessage("Creating your order...");
@@ -1061,7 +1183,11 @@ export function Storefront({ products }: { products: Product[] }) {
                     <div className="grid gap-3 sm:grid-cols-2">
                       <input
                         value={checkoutAddress.pincode}
-                        onChange={(event) => setCheckoutAddress({ ...checkoutAddress, pincode: event.target.value.replace(/\D/g, "").slice(0, 6) })}
+                        onChange={(event) => {
+                          const pincode = event.target.value.replace(/\D/g, "").slice(0, 6);
+                          setCheckoutAddress({ ...checkoutAddress, pincode });
+                          if (pincode.length < 6) setServiceability({ status: "idle", message: "" });
+                        }}
                         placeholder="Pincode"
                         inputMode="numeric"
                         required
@@ -1072,7 +1198,20 @@ export function Storefront({ products }: { products: Product[] }) {
                         placeholder="Landmark optional"
                       />
                     </div>
-                    <button className="primary-button justify-center place-order-button" onClick={checkout} disabled={!cart.length}>
+                    {serviceability.message ? (
+                      <div className={`serviceability-message ${serviceability.status}`}>
+                        {serviceability.status === "serviceable" ? <CheckCircle2 size={17} /> : serviceability.status === "checking" ? <Clock3 size={17} /> : <XCircle size={17} />}
+                        <span>{serviceability.message}</span>
+                      </div>
+                    ) : null}
+                    {serviceability.status === "unserviceable" ? (
+                      <p className="delivery-retry-text">Try another pincode or delivery location to continue checkout.</p>
+                    ) : null}
+                    <button
+                      className="primary-button justify-center place-order-button"
+                      onClick={checkout}
+                      disabled={!cart.length || ["checking", "unserviceable"].includes(serviceability.status)}
+                    >
                       Place my order <ArrowRight size={18} />
                     </button>
                   </form>
@@ -1205,6 +1344,24 @@ export function Storefront({ products }: { products: Product[] }) {
                       <span>{providerLabel(order.deliveryProvider)}</span>
                       {order.deliveryTrackingNumber ? <span>Tracking: {order.deliveryTrackingNumber}</span> : null}
                     </div>
+                    {order.deliveryProvider === "delhivery" && order.deliveryTrackingNumber ? (
+                      <div className="delivery-tracking-box">
+                        <button
+                          className="secondary-button justify-center"
+                          type="button"
+                          onClick={() => loadOrderTracking(order.id)}
+                          disabled={trackingByOrder[order.id]?.loading}
+                        >
+                          {trackingByOrder[order.id]?.loading ? "Checking..." : "Track delivery"} <Truck size={17} />
+                        </button>
+                        {trackingByOrder[order.id]?.message ? <span>{trackingByOrder[order.id]?.message}</span> : null}
+                        {trackingByOrder[order.id]?.scans?.length ? (
+                          <ol>
+                            {trackingByOrder[order.id]?.scans?.map((scan) => <li key={scan}>{scan}</li>)}
+                          </ol>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="order-timeline">
                       {buildOrderTimeline(order).map(({ title, body, tone, icon: Icon }) => (
                         <div className={`order-timeline-step ${tone}`} key={title}>

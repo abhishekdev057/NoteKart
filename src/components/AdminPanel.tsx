@@ -1004,15 +1004,27 @@ function DeliveryAssignmentForm({ order, onSaved }: { order: Order; onSaved: () 
   const [deliveryStatus, setDeliveryStatus] = useState(order.deliveryStatus ?? "review");
   const [deliveryNotes, setDeliveryNotes] = useState(order.deliveryNotes ?? "");
   const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
 
   async function saveDelivery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
-    await fetch(`/api/orders/${order.id}/delivery`, {
+    setMessage("");
+    const response = await fetch(`/api/orders/${order.id}/delivery`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider, trackingNumber, deliveryStatus, deliveryNotes }),
     });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(data.error ?? "Could not save delivery.");
+      setSaving(false);
+      return;
+    }
+    if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
+    if (data.deliveryStatus) setDeliveryStatus(data.deliveryStatus);
+    if (data.deliveryNotes) setDeliveryNotes(data.deliveryNotes);
+    setMessage(data.trackingNumber ? `Delhivery AWB assigned: ${data.trackingNumber}` : "Delivery saved.");
     await onSaved();
     setSaving(false);
   }
@@ -1032,6 +1044,7 @@ function DeliveryAssignmentForm({ order, onSaved }: { order: Order; onSaved: () 
       </select>
       <textarea value={deliveryNotes} onChange={(event) => setDeliveryNotes(event.target.value)} placeholder="Internal delivery notes" rows={2} />
       <button className="primary-button justify-center" disabled={saving} type="submit">{saving ? "Saving..." : "Save delivery"}</button>
+      {message ? <span className="form-status">{message}</span> : null}
     </form>
   );
 }

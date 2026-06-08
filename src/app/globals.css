@@ -1097,6 +1097,34 @@ img {
   padding: 10px;
 }
 
+.delivery-tracking-box {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(12, 143, 132, 0.14);
+  background: rgba(12, 143, 132, 0.07);
+  padding: 10px;
+}
+
+.delivery-tracking-box span {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.delivery-tracking-box ol {
+  display: grid;
+  gap: 6px;
+  padding-left: 18px;
+}
+
+.delivery-tracking-box li {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .order-timeline {
   display: grid;
   gap: 0;
@@ -1205,6 +1233,44 @@ img {
 .checkout-login-gate span {
   color: var(--muted);
   font-size: 13px;
+}
+
+.serviceability-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(23, 19, 15, 0.1);
+  background: rgba(23, 19, 15, 0.04);
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.serviceability-message.serviceable {
+  border-color: rgba(12, 143, 132, 0.22);
+  background: rgba(12, 143, 132, 0.1);
+  color: var(--teal);
+}
+
+.serviceability-message.unserviceable,
+.serviceability-message.error {
+  border-color: rgba(174, 45, 45, 0.22);
+  background: rgba(174, 45, 45, 0.08);
+  color: #ae2d2d;
+}
+
+.serviceability-message.checking {
+  border-color: rgba(217, 121, 25, 0.2);
+  background: rgba(217, 121, 25, 0.1);
+  color: #a35d13;
+}
+
+.delivery-retry-text {
+  color: #ae2d2d;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .empty-cart {
