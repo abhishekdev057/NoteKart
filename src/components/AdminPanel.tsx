@@ -12,6 +12,9 @@ import {
   LockKeyhole,
   Menu,
   PackageCheck,
+  Pencil,
+  Plus,
+  RotateCcw,
   Save,
   ShipWheel,
   ShoppingCart,
@@ -39,6 +42,20 @@ type AdminPanelProps = {
 };
 
 type Msg91VerifyData = Record<string, unknown>;
+type ProductForm = {
+  id?: string;
+  slug?: string;
+  name: string;
+  category: string;
+  price: number;
+  compareAtPrice: number | null;
+  stock: number;
+  description: string;
+  specs: string;
+  images: string;
+  isCustomizable: boolean;
+  isFeatured: boolean;
+};
 
 declare global {
   interface Window {
@@ -51,7 +68,7 @@ declare global {
   }
 }
 
-const emptyProduct = {
+const emptyProduct: ProductForm = {
   name: "",
   category: "Customized",
   price: 199,
@@ -145,7 +162,8 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [requests, setRequests] = useState<CustomRequest[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [form, setForm] = useState(emptyProduct);
+  const [form, setForm] = useState<ProductForm>(emptyProduct);
+  const [editingProductId, setEditingProductId] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
   const [trackingAwb, setTrackingAwb] = useState("");
   const [tracking, setTracking] = useState("");
@@ -368,14 +386,21 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
+        id: form.id || undefined,
+        slug: form.slug || undefined,
         images: form.images.split("\n").map((url) => url.trim()).filter(Boolean),
         specs: parseSpecs(form.specs),
       }),
     });
     if (response.ok) {
       setForm(emptyProduct);
+      setEditingProductId("");
+      setUploadMessage(editingProductId ? "Product updated." : "Product saved.");
       await loadAdminData();
+      return;
     }
+    const data = await response.json().catch(() => ({}));
+    setUploadMessage(data.error ?? "Could not save product.");
   }
 
   async function uploadProductImage(file: File) {
@@ -394,7 +419,43 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
 
   async function deleteProduct(id: string) {
     await fetch(`/api/products/${id}`, { method: "DELETE" });
+    if (editingProductId === id) {
+      setForm(emptyProduct);
+      setEditingProductId("");
+    }
     await loadAdminData();
+  }
+
+  function productToForm(product: Product): ProductForm {
+    return {
+      id: product.id,
+      slug: product.slug,
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      compareAtPrice: product.compareAtPrice ?? null,
+      stock: product.stock,
+      description: product.description,
+      specs: Object.entries(product.specs).map(([key, value]) => `${key}: ${value}`).join("\n"),
+      images: product.images.join("\n"),
+      isCustomizable: product.isCustomizable,
+      isFeatured: product.isFeatured,
+    };
+  }
+
+  function editProduct(product: Product) {
+    setForm(productToForm(product));
+    setEditingProductId(product.id);
+    setUploadMessage(`Editing ${product.name}.`);
+    requestAnimationFrame(() => {
+      document.getElementById("product-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function resetProductForm() {
+    setForm(emptyProduct);
+    setEditingProductId("");
+    setUploadMessage("");
   }
 
   async function trackShipment() {
@@ -527,8 +588,11 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
             form={form}
             products={products}
             uploadMessage={uploadMessage}
+            editingProductId={editingProductId}
             onDeleteProduct={deleteProduct}
+            onEditProduct={editProduct}
             onFormChange={setForm}
+            onResetForm={resetProductForm}
             onSaveProduct={saveProduct}
             onUploadProductImage={uploadProductImage}
           />
@@ -721,57 +785,113 @@ function ProductsPanel({
   form,
   products,
   uploadMessage,
+  editingProductId,
   onDeleteProduct,
+  onEditProduct,
   onFormChange,
+  onResetForm,
   onSaveProduct,
   onUploadProductImage,
 }: {
-  form: typeof emptyProduct;
+  form: ProductForm;
   products: Product[];
   uploadMessage: string;
+  editingProductId: string;
   onDeleteProduct: (id: string) => Promise<void>;
-  onFormChange: (form: typeof emptyProduct) => void;
+  onEditProduct: (product: Product) => void;
+  onFormChange: (form: ProductForm) => void;
+  onResetForm: () => void;
   onSaveProduct: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onUploadProductImage: (file: File) => Promise<void>;
 }) {
   return (
-    <section className="admin-panel">
+    <section className="admin-panel" id="product-editor">
       <div className="panel-title">
         <PackageCheck size={20} />
         <h2>Product and category management</h2>
       </div>
-      <form className="admin-form" onSubmit={onSaveProduct}>
-        <input value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} placeholder="Product name" required />
-        <input value={form.category} onChange={(event) => onFormChange({ ...form, category: event.target.value })} placeholder="Category" />
-        <div className="grid gap-3 md:grid-cols-3">
-          <input type="number" value={form.price} onChange={(event) => onFormChange({ ...form, price: Number(event.target.value) })} placeholder="Price" />
-          <input type="number" value={form.compareAtPrice} onChange={(event) => onFormChange({ ...form, compareAtPrice: Number(event.target.value) })} placeholder="MRP" />
-          <input type="number" value={form.stock} onChange={(event) => onFormChange({ ...form, stock: Number(event.target.value) })} placeholder="Stock" />
+      <div className="admin-form-head">
+        <div>
+          <strong>{editingProductId ? "Edit product" : "Add new product"}</strong>
+          <span>{editingProductId ? "Update product details, pricing, stock and media." : "Create a product with clear catalog details."}</span>
         </div>
-        <textarea value={form.description} onChange={(event) => onFormChange({ ...form, description: event.target.value })} placeholder="Description" rows={3} />
-        <textarea value={form.specs} onChange={(event) => onFormChange({ ...form, specs: event.target.value })} placeholder="Specifications, one per line as Key: Value" rows={5} />
-        <textarea value={form.images} onChange={(event) => onFormChange({ ...form, images: event.target.value })} placeholder="Image URLs, one per line" rows={4} />
+        {editingProductId ? (
+          <button className="secondary-button" type="button" onClick={onResetForm}>
+            <Plus size={17} /> New product
+          </button>
+        ) : null}
+      </div>
+      <form className="admin-form" onSubmit={onSaveProduct}>
+        <label className="admin-field">
+          <span>Product name</span>
+          <input value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} placeholder="Example: Premium A5 custom notebook" required />
+        </label>
+        <label className="admin-field">
+          <span>Category</span>
+          <input value={form.category} onChange={(event) => onFormChange({ ...form, category: event.target.value })} placeholder="Customized, Spiral, Hardbound..." />
+        </label>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="admin-field">
+            <span>Selling price (₹)</span>
+            <input type="number" value={form.price} onChange={(event) => onFormChange({ ...form, price: Number(event.target.value) })} min={0} placeholder="199" />
+          </label>
+          <label className="admin-field">
+            <span>MRP / compare price (₹)</span>
+            <input
+              type="number"
+              value={form.compareAtPrice ?? ""}
+              onChange={(event) => onFormChange({ ...form, compareAtPrice: event.target.value ? Number(event.target.value) : null })}
+              min={0}
+              placeholder="249"
+            />
+          </label>
+          <label className="admin-field">
+            <span>Stock quantity</span>
+            <input type="number" value={form.stock} onChange={(event) => onFormChange({ ...form, stock: Number(event.target.value) })} min={0} placeholder="How many in stock?" />
+          </label>
+        </div>
+        <label className="admin-field">
+          <span>Description</span>
+          <textarea value={form.description} onChange={(event) => onFormChange({ ...form, description: event.target.value })} placeholder="Short customer-facing product description" rows={3} />
+        </label>
+        <label className="admin-field">
+          <span>Specifications</span>
+          <textarea value={form.specs} onChange={(event) => onFormChange({ ...form, specs: event.target.value })} placeholder="One per line, like Size: A5" rows={5} />
+        </label>
+        <label className="admin-field">
+          <span>Product image / video URLs</span>
+          <textarea value={form.images} onChange={(event) => onFormChange({ ...form, images: event.target.value })} placeholder="Cloudinary URLs, one per line" rows={4} />
+        </label>
         <label className="admin-upload">
           <input type="file" accept="image/*,video/*" onChange={(event) => event.target.files?.[0] && onUploadProductImage(event.target.files[0])} />
           <UploadCloud size={22} /> Upload product media to Cloudinary
         </label>
-        <div className="flex flex-wrap gap-4 text-sm">
-          <label><input type="checkbox" checked={form.isCustomizable} onChange={(event) => onFormChange({ ...form, isCustomizable: event.target.checked })} /> Customizable</label>
-          <label><input type="checkbox" checked={form.isFeatured} onChange={(event) => onFormChange({ ...form, isFeatured: event.target.checked })} /> Featured</label>
+        <div className="admin-checks">
+          <label><input type="checkbox" checked={form.isCustomizable} onChange={(event) => onFormChange({ ...form, isCustomizable: event.target.checked })} /> Customizable product</label>
+          <label><input type="checkbox" checked={form.isFeatured} onChange={(event) => onFormChange({ ...form, isFeatured: event.target.checked })} /> Show as featured</label>
         </div>
-        <button className="primary-button justify-center" type="submit"><Save size={18} /> Save product</button>
+        <div className="admin-form-actions">
+          <button className="primary-button justify-center" type="submit"><Save size={18} /> {editingProductId ? "Update product" : "Save product"}</button>
+          {editingProductId ? (
+            <button className="secondary-button justify-center" type="button" onClick={onResetForm}><RotateCcw size={17} /> Cancel edit</button>
+          ) : null}
+        </div>
         {uploadMessage ? <span className="form-status">{uploadMessage}</span> : null}
       </form>
 
       <div className="admin-table">
         {products.map((product) => (
-          <div className="admin-row" key={product.id}>
-            <img src={product.images[0]} alt={product.name} />
+          <div className={`admin-row ${editingProductId === product.id ? "is-editing" : ""}`} key={product.id}>
+            {product.images[0] ? <img src={product.images[0]} alt={product.name} /> : <span className="empty-thumb" />}
             <div>
               <strong>{product.name}</strong>
               <span>{product.category} · ₹{product.price} · {product.stock} in stock</span>
+              {editingProductId === product.id ? <span className="product-editing-pill">Currently editing</span> : null}
             </div>
-            <button className="icon-button" onClick={() => onDeleteProduct(product.id)} aria-label={`Delete ${product.name}`}><Trash2 size={17} /></button>
+            <div className="admin-row-actions">
+              <button className="icon-button" onClick={() => onEditProduct(product)} aria-label={`Edit ${product.name}`}><Pencil size={17} /></button>
+              <button className="icon-button" onClick={() => onDeleteProduct(product.id)} aria-label={`Delete ${product.name}`}><Trash2 size={17} /></button>
+            </div>
           </div>
         ))}
       </div>

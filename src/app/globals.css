@@ -644,6 +644,41 @@ img {
   gap: 12px;
 }
 
+.admin-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: rgba(23, 19, 15, 0.05);
+  padding: 14px;
+}
+
+.admin-form-head strong {
+  display: block;
+  font-size: 16px;
+}
+
+.admin-form-head span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-field {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-field > span {
+  color: rgba(23, 19, 15, 0.72);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .custom-form {
   border-radius: 8px;
   border: 1px solid rgba(250, 247, 238, 0.14);
@@ -694,6 +729,7 @@ img {
 .checkout-address-form input,
 .checkout-address-form textarea,
 .admin-form input,
+.admin-form select,
 .admin-form textarea,
 .delivery-form input,
 .delivery-form textarea,
@@ -715,6 +751,7 @@ img {
 .checkout-address-form input:focus,
 .checkout-address-form textarea:focus,
 .admin-form input:focus,
+.admin-form select:focus,
 .admin-form textarea:focus,
 .delivery-form input:focus,
 .delivery-form textarea:focus,
@@ -723,6 +760,37 @@ img {
 .admin-login-card input:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(12, 143, 132, 0.12);
+}
+
+.admin-checks,
+.admin-form-actions,
+.admin-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(23, 19, 15, 0.1);
+  background: rgba(255, 253, 247, 0.72);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-checks input {
+  width: auto;
+  accent-color: var(--teal);
+}
+
+.admin-form-actions {
+  display: grid;
+  grid-template-columns: 1fr;
 }
 
 .upload-zone,
@@ -995,6 +1063,23 @@ img {
   border: 1px solid rgba(23, 19, 15, 0.1);
   background: rgba(255, 253, 247, 0.72);
   padding: 10px;
+}
+
+.admin-row.is-editing {
+  border-color: rgba(12, 143, 132, 0.45);
+  background: rgba(12, 143, 132, 0.08);
+}
+
+.product-editing-pill {
+  display: inline-flex !important;
+  width: fit-content;
+  margin-top: 7px;
+  border-radius: 8px;
+  background: rgba(12, 143, 132, 0.12);
+  padding: 5px 8px;
+  color: var(--teal) !important;
+  font-size: 11px !important;
+  font-weight: 850;
 }
 
 .cart-row .quantity-control {
@@ -1578,6 +1663,10 @@ img {
   .admin-review-grid,
   .admin-report-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-form-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .admin-desktop-only {
