@@ -2,6 +2,17 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
+import dynamic from "next/dynamic";
+
+const ThreeDNotebookStack = dynamic(
+  () => import("./ThreeDNotebookStack"),
+  { ssr: false }
+);
+
+const ThreeDNotebookCustomizer = dynamic(
+  () => import("./ThreeDNotebookCustomizer"),
+  { ssr: false }
+);
 import {
   AlertCircle,
   ArrowRight,
@@ -909,23 +920,9 @@ export function Storefront({ products }: { products: Product[] }) {
             <motion.div style={{ y: stackDrift }} className="hero-depth-grid" />
             <motion.div style={{ y: accentDrift }} className="hero-orbit hero-orbit-one" />
             <motion.div style={{ y: paperDriftSlow }} className="hero-orbit hero-orbit-two" />
-            <motion.div style={{ y: stackDrift }} className="notebook-stack">
-              <div className="book book-one">
-                <span>NOTEKART</span>
-                <strong>A4 Photo Album</strong>
-              </div>
-              <div className="book book-two">
-                <span>Classmate Series</span>
-                <strong>192 Pages</strong>
-              </div>
-              <div className="book book-three">
-                <span>Doomra Made</span>
-                <strong>A5 Hardbound</strong>
-              </div>
-            </motion.div>
-            <motion.div style={{ y: paperDriftSlow }} className="cover-swatch cover-swatch-one" />
-            <motion.div style={{ y: accentDrift }} className="cover-swatch cover-swatch-two" />
-            <div className="ruler-rail" />
+            <div className="absolute inset-0 z-10 flex items-center justify-center">
+              <ThreeDNotebookStack />
+            </div>
             <div className="floating-card top-8 right-0">
               <Smartphone size={18} />
               Secure checkout
@@ -1070,48 +1067,55 @@ export function Storefront({ products }: { products: Product[] }) {
             </div>
           ) : (
             <form action={submitCustomRequest} className="custom-form">
-              <div className={`upload-zone ${customFileUrl ? "has-preview" : ""}`}>
-                <input
-                  id="custom-artwork-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) uploadCustomFile(file);
-                  }}
-                />
-                {customFileUrl ? (
-                  <>
-                    <img className="upload-preview" src={customFileUrl} alt="Uploaded custom notebook artwork preview" />
-                    <div className="upload-preview-overlay">
-                      <Check size={18} />
-                      <span>Artwork uploaded</span>
-                    </div>
-                    {customCoverName ? <div className="cover-name-preview">{customCoverName}</div> : null}
-                    <button
-                      className="upload-remove"
-                      type="button"
-                      onClick={() => {
-                        setCustomFileUrl("");
-                        setCustomStatus("Artwork removed. Upload a new cover photo or logo.");
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </>
-                ) : (
+              {customFileUrl ? (
+                <div className="relative w-full rounded-lg overflow-hidden border border-black/10">
+                  <ThreeDNotebookCustomizer artworkUrl={customFileUrl} coverName={customCoverName} />
+                  <div className="upload-preview-overlay z-10">
+                    <Check size={18} />
+                    <span>Artwork uploaded</span>
+                  </div>
+                  <button
+                    className="upload-remove z-10"
+                    type="button"
+                    onClick={() => {
+                      setCustomFileUrl("");
+                      setCustomStatus("Artwork removed. Upload a new cover photo or logo.");
+                    }}
+                  >
+                    Remove
+                  </button>
+                  <label className="upload-replace z-10 cursor-pointer" htmlFor="custom-artwork-upload">
+                    Replace artwork
+                  </label>
+                  <input
+                    id="custom-artwork-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) uploadCustomFile(file);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="upload-zone">
+                  <input
+                    id="custom-artwork-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) uploadCustomFile(file);
+                    }}
+                  />
                   <label className="upload-prompt" htmlFor="custom-artwork-upload">
                     <ImagePlus size={30} />
                     <span>Upload cover photo or logo</span>
                     <small>PNG, JPG or WebP</small>
                   </label>
-                )}
-                {customFileUrl ? (
-                  <label className="upload-replace" htmlFor="custom-artwork-upload">
-                    Replace artwork
-                  </label>
-                ) : null}
-              </div>
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <input name="customerName" placeholder="Your name" required />
                 <input name="mobile" placeholder="Mobile number" required />
