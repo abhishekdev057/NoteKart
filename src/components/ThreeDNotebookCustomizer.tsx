@@ -235,12 +235,14 @@ export default function ThreeDNotebookCustomizer({
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Orbit Controls - full 360-degree spherical rotation
+    // Orbit Controls - restricted horizontal view, full vertical sweep
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minPolarAngle = 0;
-    controls.maxPolarAngle = Math.PI; // Full spherical vertical rotation
+    controls.maxPolarAngle = Math.PI; // Full vertical rotation
+    controls.minAzimuthAngle = -Math.PI / 2; // Limit left rotation to -90 deg
+    controls.maxAzimuthAngle = Math.PI / 2;  // Limit right rotation to +90 deg
     controls.minDistance = 3.5;
     controls.maxDistance = 10;
     controls.autoRotate = !artworkUrl; // Auto rotate only if no artwork is uploaded yet
@@ -439,7 +441,7 @@ export default function ThreeDNotebookCustomizer({
         </div>
       )}
       <div className="absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 text-[10px] font-medium tracking-wide text-white/90 uppercase select-none pointer-events-none z-10">
-        Drag to rotate 360°
+        Drag to rotate
       </div>
     </div>
   );

@@ -38,12 +38,14 @@ export default function ThreeDNotebookStack() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Orbit Controls - full spherical view
+    // Orbit Controls - restricted horizontal view, full vertical sweep
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minPolarAngle = 0;
     controls.maxPolarAngle = Math.PI;
+    controls.minAzimuthAngle = -Math.PI / 2; // Limit left rotation to -90 deg
+    controls.maxAzimuthAngle = Math.PI / 2;  // Limit right rotation to +90 deg
     controls.minDistance = isMobile ? 5.5 : 4;
     controls.maxDistance = 12;
     controls.enableZoom = false; // Prevent page scroll hijack
@@ -233,10 +235,10 @@ export default function ThreeDNotebookStack() {
     b3.bookGroup.rotation.y = 0.02;
     stackGroup.add(b3.bookGroup);
 
-    // Isometric tilt on stackGroup
-    stackGroup.rotation.x = 0.85;
-    stackGroup.rotation.y = -0.15;
-    stackGroup.rotation.z = -0.3;
+    // Front-on tilt on stackGroup (clean horizontal stack)
+    stackGroup.rotation.x = 0.2;
+    stackGroup.rotation.y = -0.4;
+    stackGroup.rotation.z = 0;
 
     // --- PROCEDURAL WORKSPACE ELEMENTS (NEAT FLAT-LAY DESK LAYOUT) ---
 
@@ -522,8 +524,8 @@ export default function ThreeDNotebookStack() {
 
       // Slow orbital rotate of stack (mouse tracking parallax dampening if not dragging)
       if (!isDragging) {
-        stackGroup.rotation.x = THREE.MathUtils.lerp(stackGroup.rotation.x, 0.85 + Math.sin(time * 0.4) * 0.015, 0.08);
-        stackGroup.rotation.y = THREE.MathUtils.lerp(stackGroup.rotation.y, -0.15 + Math.cos(time * 0.3) * 0.02, 0.08);
+        stackGroup.rotation.x = THREE.MathUtils.lerp(stackGroup.rotation.x, 0.2 + Math.sin(time * 0.4) * 0.015, 0.08);
+        stackGroup.rotation.y = THREE.MathUtils.lerp(stackGroup.rotation.y, -0.4 + Math.cos(time * 0.3) * 0.02, 0.08);
       }
 
       // Flat lay breathing animation (tiny hovering up and down, but strictly vertical, no horizontal shifting)
@@ -613,7 +615,7 @@ export default function ThreeDNotebookStack() {
     >
       <canvas ref={canvasRef} className="block h-full w-full cursor-grab active:cursor-grabbing" />
       <div className="absolute bottom-2 right-4 rounded bg-black/60 px-2.5 py-1 text-[10px] font-medium tracking-wider text-white/90 uppercase select-none pointer-events-none">
-        Drag to spin stack 360°
+        Drag to rotate stack
       </div>
     </div>
   );
