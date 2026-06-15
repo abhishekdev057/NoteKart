@@ -914,9 +914,6 @@ export function Storefront({ products }: { products: Product[] }) {
           </div>
 
           <motion.div style={{ y: heroLift, rotateX: heroTilt }} className="hero-stage">
-            <motion.div style={{ y: stackDrift }} className="hero-depth-grid" />
-            <motion.div style={{ y: accentDrift }} className="hero-orbit hero-orbit-one" />
-            <motion.div style={{ y: paperDriftSlow }} className="hero-orbit hero-orbit-two" />
             <div className="absolute inset-0 z-10 flex items-center justify-center">
               <ThreeDNotebookStack />
             </div>

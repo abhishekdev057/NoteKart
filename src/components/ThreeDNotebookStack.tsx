@@ -240,259 +240,72 @@ export default function ThreeDNotebookStack() {
     stackGroup.rotation.y = -0.4;
     stackGroup.rotation.z = 0;
 
-    // --- PROCEDURAL WORKSPACE ELEMENTS (NEAT FLAT-LAY DESK LAYOUT) ---
-
-    // 1. Ruled Paper Sheet
-    const ruledPaperCanvas = document.createElement("canvas");
-    ruledPaperCanvas.width = 512;
-    ruledPaperCanvas.height = 724;
-    const rpCtx = ruledPaperCanvas.getContext("2d");
-    if (rpCtx) {
-      rpCtx.fillStyle = "#fffdf7";
-      rpCtx.fillRect(0, 0, 512, 724);
-      rpCtx.strokeStyle = "#ff7b7b";
-      rpCtx.lineWidth = 2.5;
-      rpCtx.beginPath();
-      rpCtx.moveTo(85, 0);
-      rpCtx.lineTo(85, 724);
-      rpCtx.stroke();
-      rpCtx.strokeStyle = "#a5d8ff";
-      rpCtx.lineWidth = 1;
-      for (let y = 60; y < 724; y += 28) {
-        rpCtx.beginPath();
-        rpCtx.moveTo(0, y);
-        rpCtx.lineTo(512, y);
-        rpCtx.stroke();
-      }
-    }
-    const ruledTexture = new THREE.CanvasTexture(ruledPaperCanvas);
-    const ruledMat = new THREE.MeshStandardMaterial({
-      map: ruledTexture,
-      roughness: 0.82,
-      side: THREE.DoubleSide,
+    // --- DISPLAY PEDESTAL (FLOATING BASE) ---
+    const pedestalGeo = new THREE.CylinderGeometry(2.3, 2.3, 0.15, 64);
+    const pedestalMat = new THREE.MeshStandardMaterial({
+      color: "#f3eee3",
+      roughness: 0.5,
+      metalness: 0.05,
     });
-    const paperGeo1 = new THREE.PlaneGeometry(1.6, 2.26, 4, 4);
-    const pos1 = paperGeo1.attributes.position;
-    for (let i = 0; i < pos1.count; i++) {
-      const x = pos1.getX(i);
-      const y = pos1.getY(i);
-      pos1.setZ(i, Math.sin(x * 1.1) * 0.06 + Math.cos(y * 0.8) * 0.03);
-    }
-    paperGeo1.computeVertexNormals();
-    const ruledPaper = new THREE.Mesh(paperGeo1, ruledMat);
-    // Laid neatly flat on the left side of the desk
-    ruledPaper.position.set(-2.5, -1.82, 0.3);
-    ruledPaper.rotation.set(-Math.PI / 2, 0, 0.15);
-    ruledPaper.receiveShadow = true;
-    scene.add(ruledPaper);
+    const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
+    pedestal.position.set(0, -0.65, 0);
+    pedestal.receiveShadow = true;
+    pedestal.castShadow = true;
+    scene.add(pedestal);
 
-    // 2. Grid Paper Sheet
-    const gridPaperCanvas = document.createElement("canvas");
-    gridPaperCanvas.width = 512;
-    gridPaperCanvas.height = 724;
-    const gpCtx = gridPaperCanvas.getContext("2d");
-    if (gpCtx) {
-      gpCtx.fillStyle = "#fffdf7";
-      gpCtx.fillRect(0, 0, 512, 724);
-      gpCtx.strokeStyle = "rgba(12, 143, 132, 0.16)";
-      gpCtx.lineWidth = 1;
-      for (let x = 20; x < 512; x += 22) {
-        gpCtx.beginPath();
-        gpCtx.moveTo(x, 0);
-        gpCtx.lineTo(x, 724);
-        gpCtx.stroke();
-      }
-      for (let y = 20; y < 724; y += 22) {
-        gpCtx.beginPath();
-        gpCtx.moveTo(0, y);
-        gpCtx.lineTo(512, y);
-        gpCtx.stroke();
-      }
-    }
-    const gridTexture = new THREE.CanvasTexture(gridPaperCanvas);
-    const gridMat = new THREE.MeshStandardMaterial({
-      map: gridTexture,
-      roughness: 0.82,
-      side: THREE.DoubleSide,
+    // --- ABSTRACT PREMIUM SHAPES ---
+    // 1. Golden Idea Ring
+    const ringGeo = new THREE.TorusGeometry(2.3, 0.03, 16, 80);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: "#d4af37",
+      metalness: 0.95,
+      roughness: 0.15,
     });
-    const paperGeo2 = new THREE.PlaneGeometry(1.5, 2.12, 4, 4);
-    const pos2 = paperGeo2.attributes.position;
-    for (let i = 0; i < pos2.count; i++) {
-      const x = pos2.getX(i);
-      const y = pos2.getY(i);
-      pos2.setZ(i, Math.sin(x * 1.2) * 0.05 + Math.cos(y * 0.7) * 0.04);
-    }
-    paperGeo2.computeVertexNormals();
-    const gridPaper = new THREE.Mesh(paperGeo2, gridMat);
-    // Laid flat on the right side of the desk
-    gridPaper.position.set(2.5, -1.82, -0.3);
-    gridPaper.rotation.set(-Math.PI / 2, 0, -0.15);
-    gridPaper.receiveShadow = true;
-    scene.add(gridPaper);
+    const goldenRing = new THREE.Mesh(ringGeo, ringMat);
+    goldenRing.position.set(0, 0, 0);
+    goldenRing.rotation.x = Math.PI / 3;
+    goldenRing.castShadow = true;
+    scene.add(goldenRing);
 
-    // 3. Procedural Hexagonal Pencils
-    const createPencil = (color: string) => {
-      const pencil = new THREE.Group();
-
-      const bodyGeo = new THREE.CylinderGeometry(0.045, 0.045, 2.0, 6);
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color,
-        roughness: 0.42,
-        metalness: 0.05,
-      });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
-      body.castShadow = true;
-      pencil.add(body);
-
-      const woodGeo = new THREE.ConeGeometry(0.045, 0.3, 6);
-      const woodMat = new THREE.MeshStandardMaterial({
-        color: "#ebd095",
-        roughness: 0.78,
-      });
-      const wood = new THREE.Mesh(woodGeo, woodMat);
-      wood.position.y = 1.0 + 0.15;
-      wood.castShadow = true;
-      pencil.add(wood);
-
-      const leadGeo = new THREE.ConeGeometry(0.016, 0.08, 6);
-      const leadMat = new THREE.MeshStandardMaterial({
-        color: "#2f2f32",
-        roughness: 0.85,
-      });
-      const lead = new THREE.Mesh(leadGeo, leadMat);
-      lead.position.y = 1.0 + 0.3 + 0.04;
-      lead.castShadow = true;
-      pencil.add(lead);
-
-      const ferruleGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.14, 6);
-      const ferruleMat = new THREE.MeshStandardMaterial({
-        color: "#e3bc64",
-        metalness: 0.95,
-        roughness: 0.12,
-      });
-      const ferrule = new THREE.Mesh(ferruleGeo, ferruleMat);
-      ferrule.position.y = -1.0 - 0.07;
-      ferrule.castShadow = true;
-      pencil.add(ferrule);
-
-      const eraserGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.12, 6);
-      const eraserMat = new THREE.MeshStandardMaterial({
-        color: "#fc9088",
-        roughness: 0.68,
-      });
-      const eraser = new THREE.Mesh(eraserGeo, eraserMat);
-      eraser.position.y = -1.0 - 0.14 - 0.06;
-      eraser.castShadow = true;
-      pencil.add(eraser);
-
-      return pencil;
-    };
-    
-    // Pencil 1 (Saffron): Laid flat at the bottom-left desk area
-    const pencil1 = createPencil("#d97919");
-    pencil1.position.set(-1.8, -1.88, 1.1);
-    pencil1.rotation.set(Math.PI / 2, 0.25, 0);
-    scene.add(pencil1);
-
-    // Pencil 2 (Teal): Laid flat at the bottom-right desk area
-    const pencil2 = createPencil("#0c8f84");
-    pencil2.position.set(1.8, -1.88, 0.9);
-    pencil2.rotation.set(Math.PI / 2, -0.35, 0);
-    scene.add(pencil2);
-
-    // 4. Floating Gold Paper Clips (Wire loop Tubes)
-    const createPaperClip = () => {
-      const points = [
-        new THREE.Vector3(0, -0.28, 0),
-        new THREE.Vector3(0, 0.28, 0),
-        new THREE.Vector3(0.035, 0.32, 0),
-        new THREE.Vector3(0.07, 0.28, 0),
-        new THREE.Vector3(0.07, -0.22, 0),
-        new THREE.Vector3(0.035, -0.26, 0),
-        new THREE.Vector3(0, -0.22, 0),
-        new THREE.Vector3(0, 0.14, 0),
-        new THREE.Vector3(-0.018, 0.18, 0),
-        new THREE.Vector3(-0.035, 0.14, 0),
-        new THREE.Vector3(-0.035, 0, 0),
-      ];
-      const curve = new THREE.CatmullRomCurve3(points);
-      const clipGeo = new THREE.TubeGeometry(curve, 32, 0.01, 8, false);
-      const clipMat = new THREE.MeshStandardMaterial({
-        color: "#d4af37",
-        metalness: 0.95,
-        roughness: 0.15,
-      });
-      const clip = new THREE.Mesh(clipGeo, clipMat);
-      clip.castShadow = true;
-      return { clip, clipGeo, clipMat };
-    };
-
-    const c1 = createPaperClip();
-    // Placed flat next to Pencil 1
-    c1.clip.position.set(-1.3, -1.9, 1.3);
-    c1.clip.rotation.set(Math.PI / 2, 0.1, 0);
-    c1.clip.scale.set(1.3, 1.3, 1.3);
-    scene.add(c1.clip);
-
-    const c2 = createPaperClip();
-    // Placed flat next to Pencil 2
-    c2.clip.position.set(1.4, -1.9, 1.1);
-    c2.clip.rotation.set(Math.PI / 2, -0.25, 0);
-    c2.clip.scale.set(1.3, 1.3, 1.3);
-    scene.add(c2.clip);
-
-    // 5. Floating Acrylic Ruler
-    const rulerCanvas = document.createElement("canvas");
-    rulerCanvas.width = 128;
-    rulerCanvas.height = 512;
-    const rCtx = rulerCanvas.getContext("2d");
-    if (rCtx) {
-      rCtx.fillStyle = "rgba(250, 247, 238, 0.1)";
-      rCtx.fillRect(0, 0, 128, 512);
-      rCtx.strokeStyle = "#17130f";
-      rCtx.lineWidth = 1.5;
-      for (let y = 10; y < 502; y += 8) {
-        const isMajor = (y - 10) % 40 === 0;
-        rCtx.beginPath();
-        rCtx.moveTo(0, y);
-        rCtx.lineTo(isMajor ? 32 : 16, y);
-        rCtx.stroke();
-
-        if (isMajor) {
-          rCtx.fillStyle = "#17130f";
-          rCtx.font = "bold 18px system-ui";
-          rCtx.textAlign = "left";
-          rCtx.textBaseline = "middle";
-          rCtx.fillText(`${Math.floor((y - 10) / 40)}`, 40, y);
-        }
-      }
-    }
-    const rulerTexture = new THREE.CanvasTexture(rulerCanvas);
-    const rulerGeo = new THREE.BoxGeometry(0.32, 2.2, 0.015);
-    const rulerMat = new THREE.MeshStandardMaterial({
-      map: rulerTexture,
-      transparent: true,
-      opacity: 0.64,
-      roughness: 0.12,
-      color: "#faf7ee",
+    // 2. Frosted Glass Sphere
+    const glassSphereGeo = new THREE.SphereGeometry(0.28, 32, 32);
+    const glassSphereMat = new THREE.MeshPhysicalMaterial({
+      color: "#ffffff",
+      roughness: 0.15,
+      metalness: 0.0,
+      transmission: 0.9,
+      thickness: 0.6,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
     });
-    const ruler = new THREE.Mesh(rulerGeo, rulerMat);
-    // Placed flat on the desk, pointing horizontally
-    ruler.position.set(1.0, -1.9, 1.5);
-    ruler.rotation.set(Math.PI / 2, 0, -Math.PI / 2 + 0.15);
-    ruler.castShadow = true;
-    scene.add(ruler);
+    const glassSphere = new THREE.Mesh(glassSphereGeo, glassSphereMat);
+    glassSphere.position.set(1.9, 0.4, 0.6);
+    glassSphere.castShadow = true;
+    scene.add(glassSphere);
 
-    // Base positions to calculate float animations
-    const ruledBaseY = ruledPaper.position.y;
-    const gridBaseY = gridPaper.position.y;
-    
-    // Tiny micro-float amplitude for floor elements to make them breathe
-    const pencil1BaseY = pencil1.position.y;
-    const pencil2BaseY = pencil2.position.y;
-    const clip1BaseY = c1.clip.position.y;
-    const clip2BaseY = c2.clip.position.y;
-    const rulerBaseY = ruler.position.y;
+    // 3. Matte Teal Clay Sphere
+    const tealSphereGeo = new THREE.SphereGeometry(0.18, 32, 32);
+    const tealSphereMat = new THREE.MeshStandardMaterial({
+      color: "#0c8f84",
+      roughness: 0.75,
+      metalness: 0.0,
+    });
+    const tealSphere = new THREE.Mesh(tealSphereGeo, tealSphereMat);
+    tealSphere.position.set(-1.8, -0.1, -0.8);
+    tealSphere.castShadow = true;
+    scene.add(tealSphere);
+
+    // 4. Matte Saffron Cone
+    const saffronConeGeo = new THREE.ConeGeometry(0.14, 0.32, 32);
+    const saffronConeMat = new THREE.MeshStandardMaterial({
+      color: "#d97919",
+      roughness: 0.8,
+      metalness: 0.0,
+    });
+    const saffronCone = new THREE.Mesh(saffronConeGeo, saffronConeMat);
+    saffronCone.position.set(1.5, -0.2, -1.0);
+    saffronCone.castShadow = true;
+    scene.add(saffronCone);
 
     // Handle Resize
     const handleResize = () => {
@@ -528,17 +341,24 @@ export default function ThreeDNotebookStack() {
         stackGroup.rotation.y = THREE.MathUtils.lerp(stackGroup.rotation.y, -0.4 + Math.cos(time * 0.3) * 0.02, 0.08);
       }
 
-      // Flat lay breathing animation (tiny hovering up and down, but strictly vertical, no horizontal shifting)
-      ruledPaper.position.y = ruledBaseY + Math.sin(time * 0.8) * 0.02;
-      gridPaper.position.y = gridBaseY + Math.cos(time * 0.75) * 0.02;
-      
-      pencil1.position.y = pencil1BaseY + Math.sin(time * 1.1) * 0.02;
-      pencil2.position.y = pencil2BaseY + Math.sin(time * 1.0 + 1.5) * 0.02;
-      
-      c1.clip.position.y = clip1BaseY + Math.sin(time * 1.3) * 0.015;
-      c2.clip.position.y = clip2BaseY + Math.cos(time * 1.2) * 0.015;
-      
-      ruler.position.y = rulerBaseY + Math.sin(time * 0.9) * 0.018;
+      // Pedestal breathing
+      pedestal.position.y = -0.65 + Math.sin(time * 0.8) * 0.02;
+
+      // Golden ring rotation
+      goldenRing.rotation.z = time * 0.25;
+
+      // Floating / orbiting abstract objects
+      glassSphere.position.y = 0.4 + Math.sin(time * 1.1) * 0.08;
+      glassSphere.position.x = 1.9 + Math.sin(time * 0.6) * 0.15;
+      glassSphere.position.z = 0.6 + Math.cos(time * 0.6) * 0.15;
+
+      tealSphere.position.y = -0.1 + Math.cos(time * 1.3) * 0.06;
+      tealSphere.position.x = -1.8 + Math.cos(time * 0.5) * 0.12;
+      tealSphere.position.z = -0.8 + Math.sin(time * 0.5) * 0.12;
+
+      saffronCone.position.y = -0.2 + Math.sin(time * 0.95) * 0.07;
+      saffronCone.rotation.y = time * 0.5;
+      saffronCone.rotation.z = Math.sin(time * 0.8) * 0.15;
 
       controls.update();
       renderer.render(scene, camera);
@@ -563,45 +383,17 @@ export default function ThreeDNotebookStack() {
         b.pagesMat.dispose();
       });
 
-      // Dispose Papers
-      paperGeo1.dispose();
-      ruledTexture.dispose();
-      ruledMat.dispose();
-      paperGeo2.dispose();
-      gridTexture.dispose();
-      gridMat.dispose();
-
-      // Dispose Pencils & Clips
-      pencil1.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach((mat) => mat.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
-      pencil2.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach((mat) => mat.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
-
-      c1.clipGeo.dispose();
-      c1.clipMat.dispose();
-      c2.clipGeo.dispose();
-      c2.clipMat.dispose();
-
-      // Dispose Ruler
-      rulerGeo.dispose();
-      rulerTexture.dispose();
-      rulerMat.dispose();
+      // Dispose Pedestal and Abstract Shapes
+      pedestalGeo.dispose();
+      pedestalMat.dispose();
+      ringGeo.dispose();
+      ringMat.dispose();
+      glassSphereGeo.dispose();
+      glassSphereMat.dispose();
+      tealSphereGeo.dispose();
+      tealSphereMat.dispose();
+      saffronConeGeo.dispose();
+      saffronConeMat.dispose();
 
       shadowPlaneGeo.dispose();
       shadowPlaneMat.dispose();
