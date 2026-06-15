@@ -47,7 +47,7 @@ const seedProducts: Product[] = [
     name: "A4 Custom Photo Album",
     slug: "custom-photo-journal",
     category: "Customized",
-    price: 182,
+    price: 199,
     compareAtPrice: 249,
     stock: 75,
     description: "A4 custom photo album with your cover photo and optional printed name.",

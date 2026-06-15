@@ -1068,7 +1068,7 @@ export function Storefront({ products }: { products: Product[] }) {
                   onChange={(e) => setCustomizingProductId(e.target.value)}
                   className="w-full border border-[rgba(250,247,238,0.14)] p-3.5 bg-white/10 text-white rounded-lg focus:outline-none focus:border-[var(--teal)] focus:ring-1 focus:ring-[var(--teal)] transition-all font-semibold"
                 >
-                  <option value="custom-photo-journal" className="bg-[#17130f] text-white">A4 Custom Photo Album (₹182)</option>
+                  <option value="custom-photo-journal" className="bg-[#17130f] text-white">A4 Custom Photo Album (₹199)</option>
                   <option value="classic-a5-hardbound" className="bg-[#17130f] text-white">Classic A5 Hardbound Notebook (₹249)</option>
                 </select>
               </div>
