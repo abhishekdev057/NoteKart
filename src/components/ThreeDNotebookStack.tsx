@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export default function ThreeDNotebookStack() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -38,17 +37,7 @@ export default function ThreeDNotebookStack() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Orbit Controls - restricted horizontal view, full vertical sweep
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minPolarAngle = 0;
-    controls.maxPolarAngle = Math.PI;
-    controls.minAzimuthAngle = -Math.PI / 2; // Limit left rotation to -90 deg
-    controls.maxAzimuthAngle = Math.PI / 2;  // Limit right rotation to +90 deg
-    controls.minDistance = isMobile ? 5.5 : 4;
-    controls.maxDistance = 12;
-    controls.enableZoom = false; // Prevent page scroll hijack
+    // No interactive OrbitControls to keep it as a clean looping visual
 
     // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
@@ -81,14 +70,7 @@ export default function ThreeDNotebookStack() {
     shadowPlane.receiveShadow = true;
     scene.add(shadowPlane);
 
-    // Dynamic drag tracking
-    let isDragging = false;
-    controls.addEventListener("start", () => {
-      isDragging = true;
-    });
-    controls.addEventListener("end", () => {
-      isDragging = false;
-    });
+    // Auto rotation parameters
 
     // Central Stack container group
     const stackGroup = new THREE.Group();
@@ -335,11 +317,9 @@ export default function ThreeDNotebookStack() {
       b2.bookGroup.position.z = 0.0 + Math.sin(time * 1.25 + 1.2) * 0.005;
       b3.bookGroup.position.z = -0.58 + Math.sin(time * 1.05 + 2.5) * 0.008;
 
-      // Slow orbital rotate of stack (mouse tracking parallax dampening if not dragging)
-      if (!isDragging) {
-        stackGroup.rotation.x = THREE.MathUtils.lerp(stackGroup.rotation.x, 0.2 + Math.sin(time * 0.4) * 0.015, 0.08);
-        stackGroup.rotation.y = THREE.MathUtils.lerp(stackGroup.rotation.y, -0.4 + Math.cos(time * 0.3) * 0.02, 0.08);
-      }
+      // Slow orbital rotate of stack (gentle auto-rotation oscillation)
+      stackGroup.rotation.x = THREE.MathUtils.lerp(stackGroup.rotation.x, 0.2 + Math.sin(time * 0.4) * 0.015, 0.08);
+      stackGroup.rotation.y = THREE.MathUtils.lerp(stackGroup.rotation.y, -0.4 + Math.cos(time * 0.3) * 0.02, 0.08);
 
       // Pedestal breathing
       pedestal.position.y = -0.65 + Math.sin(time * 0.8) * 0.02;
@@ -360,7 +340,6 @@ export default function ThreeDNotebookStack() {
       saffronCone.rotation.y = time * 0.5;
       saffronCone.rotation.z = Math.sin(time * 0.8) * 0.15;
 
-      controls.update();
       renderer.render(scene, camera);
     };
     animate();
@@ -369,7 +348,6 @@ export default function ThreeDNotebookStack() {
     return () => {
       cancelAnimationFrame(animId);
       resizeObserver.disconnect();
-      controls.dispose();
       renderer.dispose();
 
       // Dispose Central Stack
@@ -403,12 +381,9 @@ export default function ThreeDNotebookStack() {
   return (
     <div
       ref={containerRef}
-      className="relative flex h-[440px] w-full items-center justify-center md:h-[520px]"
+      className="relative flex h-[440px] w-full items-center justify-center md:h-[520px] pointer-events-none"
     >
-      <canvas ref={canvasRef} className="block h-full w-full cursor-grab active:cursor-grabbing" />
-      <div className="absolute bottom-2 right-4 rounded bg-black/60 px-2.5 py-1 text-[10px] font-medium tracking-wider text-white/90 uppercase select-none pointer-events-none">
-        Drag to rotate stack
-      </div>
+      <canvas ref={canvasRef} className="block h-full w-full" />
     </div>
   );
 }
