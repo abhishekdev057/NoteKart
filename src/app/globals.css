@@ -121,54 +121,7 @@ img {
     linear-gradient(180deg, rgba(255, 253, 247, 0.18), transparent 64%);
 }
 
-.paper-sheet {
-  position: absolute;
-  width: 150px;
-  height: 210px;
-  border: 1px solid rgba(23, 19, 15, 0.08);
-  border-radius: 8px;
-  background:
-    linear-gradient(rgba(23, 19, 15, 0.05) 1px, transparent 1px) 0 26px / 100% 28px,
-    #fffdf7;
-  box-shadow: 0 24px 80px rgba(23, 19, 15, 0.12);
-}
 
-.paper-sheet::after {
-  content: "";
-  position: absolute;
-  inset: 18px 16px;
-  border-top: 2px solid rgba(12, 143, 132, 0.18);
-  border-bottom: 2px solid rgba(217, 121, 25, 0.15);
-}
-
-.paper-sheet-left {
-  filter: drop-shadow(24px 36px 34px rgba(23, 19, 15, 0.16));
-}
-
-.paper-sheet-mid {
-  width: 118px;
-  height: 168px;
-  opacity: 0.72;
-}
-
-.paper-sheet-right {
-  opacity: 0.82;
-  filter: drop-shadow(-18px 32px 34px rgba(12, 143, 132, 0.13));
-}
-
-.hero-pencil {
-  position: absolute;
-  right: 38%;
-  top: 170px;
-  z-index: 1;
-  width: 220px;
-  height: 18px;
-  transform: rotate(-22deg);
-  border-radius: 999px;
-  background:
-    linear-gradient(90deg, #17130f 0 10px, #f3d07d 10px 34px, #d97919 34px calc(100% - 22px), #f8e8ba calc(100% - 22px) 100%);
-  box-shadow: 0 18px 44px rgba(23, 19, 15, 0.18);
-}
 
 .hero-stage {
   position: relative;

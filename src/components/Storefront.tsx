@@ -879,10 +879,6 @@ export function Storefront({ products }: { products: Product[] }) {
       </header>
 
       <section className="hero-section relative overflow-hidden px-4 pb-16 pt-28 md:px-8 md:pb-24 md:pt-32">
-        <motion.div style={{ y: paperDrift }} className="paper-sheet paper-sheet-left left-[4%] top-28 rotate-[-10deg]" />
-        <motion.div style={{ y: paperDriftSlow }} className="paper-sheet paper-sheet-mid left-[43%] top-24 hidden rotate-[5deg] md:block" />
-        <motion.div style={{ y: accentDrift }} className="hero-pencil hidden md:block" />
-        <motion.div style={{ y: heroLift }} className="paper-sheet paper-sheet-right right-[8%] top-36 hidden rotate-[12deg] md:block" />
         <div className="mx-auto grid max-w-7xl items-center gap-10 md:grid-cols-[0.95fr_1.05fr]">
           <div className="relative z-10">
             <p className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--teal)]">
