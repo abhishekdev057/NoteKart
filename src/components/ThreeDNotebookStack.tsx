@@ -38,12 +38,12 @@ export default function ThreeDNotebookStack() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Orbit Controls - full 360 spherical view
+    // Orbit Controls - full spherical view
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minPolarAngle = 0;
-    controls.maxPolarAngle = Math.PI; // Full spherical vertical rotation
+    controls.maxPolarAngle = Math.PI;
     controls.minDistance = isMobile ? 5.5 : 4;
     controls.maxDistance = 12;
     controls.enableZoom = false; // Prevent page scroll hijack
@@ -90,7 +90,7 @@ export default function ThreeDNotebookStack() {
 
     // Central Stack container group
     const stackGroup = new THREE.Group();
-    stackGroup.position.set(0, 0.1, 0); // perfectly centered vertical offset
+    stackGroup.position.set(0, 0.2, 0); // centered vertical offset
     scene.add(stackGroup);
 
     // --- LANDSCAPE BOOK GENERATOR ---
@@ -199,8 +199,8 @@ export default function ThreeDNotebookStack() {
       "A4 Photo Album",
       ["#0c8f84", "#064642"]
     );
-    b1.bookGroup.position.set(-0.24, 0.24, 0.36);
-    b1.bookGroup.rotation.y = 0.22;
+    b1.bookGroup.position.set(-0.06, 0.05, 0.34);
+    b1.bookGroup.rotation.y = 0.15;
     stackGroup.add(b1.bookGroup);
 
     // Book 2: 192 Pages Classmate Series (Saffron) - Middle
@@ -215,7 +215,7 @@ export default function ThreeDNotebookStack() {
       ["#d97919", "#783b0a"]
     );
     b2.bookGroup.position.set(0.0, 0.0, 0.0);
-    b2.bookGroup.rotation.y = -0.15;
+    b2.bookGroup.rotation.y = -0.08;
     stackGroup.add(b2.bookGroup);
 
     // Book 3: A5 Hardbound (Gold/Beige) - Bottom
@@ -229,8 +229,8 @@ export default function ThreeDNotebookStack() {
       "A5 Hardbound",
       ["#f6e3af", "#cca75a"]
     );
-    b3.bookGroup.position.set(0.24, -0.24, -0.36);
-    b3.bookGroup.rotation.y = 0.05;
+    b3.bookGroup.position.set(0.06, -0.05, -0.34);
+    b3.bookGroup.rotation.y = 0.02;
     stackGroup.add(b3.bookGroup);
 
     // Isometric tilt on stackGroup
@@ -238,7 +238,7 @@ export default function ThreeDNotebookStack() {
     stackGroup.rotation.y = -0.15;
     stackGroup.rotation.z = -0.3;
 
-    // --- PROCEDURAL BACKGROUND ELEMENTS ---
+    // --- PROCEDURAL WORKSPACE ELEMENTS (NEAT FLAT-LAY DESK LAYOUT) ---
 
     // 1. Ruled Paper Sheet
     const ruledPaperCanvas = document.createElement("canvas");
@@ -248,14 +248,12 @@ export default function ThreeDNotebookStack() {
     if (rpCtx) {
       rpCtx.fillStyle = "#fffdf7";
       rpCtx.fillRect(0, 0, 512, 724);
-      // Ruled Margin
       rpCtx.strokeStyle = "#ff7b7b";
       rpCtx.lineWidth = 2.5;
       rpCtx.beginPath();
       rpCtx.moveTo(85, 0);
       rpCtx.lineTo(85, 724);
       rpCtx.stroke();
-      // Ruled Lines
       rpCtx.strokeStyle = "#a5d8ff";
       rpCtx.lineWidth = 1;
       for (let y = 60; y < 724; y += 28) {
@@ -271,19 +269,19 @@ export default function ThreeDNotebookStack() {
       roughness: 0.82,
       side: THREE.DoubleSide,
     });
-    // Curved paper geometry
     const paperGeo1 = new THREE.PlaneGeometry(1.6, 2.26, 4, 4);
     const pos1 = paperGeo1.attributes.position;
     for (let i = 0; i < pos1.count; i++) {
       const x = pos1.getX(i);
       const y = pos1.getY(i);
-      pos1.setZ(i, Math.sin(x * 1.1) * 0.08 + Math.cos(y * 0.8) * 0.04);
+      pos1.setZ(i, Math.sin(x * 1.1) * 0.06 + Math.cos(y * 0.8) * 0.03);
     }
     paperGeo1.computeVertexNormals();
     const ruledPaper = new THREE.Mesh(paperGeo1, ruledMat);
-    ruledPaper.position.set(-2.4, 0.3, -0.6);
-    ruledPaper.rotation.set(0.4, 0.5, -0.4);
-    ruledPaper.castShadow = true;
+    // Laid neatly flat on the left side of the desk
+    ruledPaper.position.set(-2.5, -1.82, 0.3);
+    ruledPaper.rotation.set(-Math.PI / 2, 0, 0.15);
+    ruledPaper.receiveShadow = true;
     scene.add(ruledPaper);
 
     // 2. Grid Paper Sheet
@@ -294,7 +292,6 @@ export default function ThreeDNotebookStack() {
     if (gpCtx) {
       gpCtx.fillStyle = "#fffdf7";
       gpCtx.fillRect(0, 0, 512, 724);
-      // Grid Pattern
       gpCtx.strokeStyle = "rgba(12, 143, 132, 0.16)";
       gpCtx.lineWidth = 1;
       for (let x = 20; x < 512; x += 22) {
@@ -321,21 +318,21 @@ export default function ThreeDNotebookStack() {
     for (let i = 0; i < pos2.count; i++) {
       const x = pos2.getX(i);
       const y = pos2.getY(i);
-      pos2.setZ(i, Math.sin(x * 1.2) * 0.07 + Math.cos(y * 0.7) * 0.05);
+      pos2.setZ(i, Math.sin(x * 1.2) * 0.05 + Math.cos(y * 0.7) * 0.04);
     }
     paperGeo2.computeVertexNormals();
     const gridPaper = new THREE.Mesh(paperGeo2, gridMat);
-    gridPaper.position.set(2.4, 0.7, -0.8);
-    gridPaper.rotation.set(-0.3, -0.4, 0.3);
-    gridPaper.castShadow = true;
+    // Laid flat on the right side of the desk
+    gridPaper.position.set(2.5, -1.82, -0.3);
+    gridPaper.rotation.set(-Math.PI / 2, 0, -0.15);
+    gridPaper.receiveShadow = true;
     scene.add(gridPaper);
 
-    // 3. Procedural Hexagonal Pencil
+    // 3. Procedural Hexagonal Pencils
     const createPencil = (color: string) => {
       const pencil = new THREE.Group();
 
-      // Main Hexagonal Body
-      const bodyGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.1, 6);
+      const bodyGeo = new THREE.CylinderGeometry(0.045, 0.045, 2.0, 6);
       const bodyMat = new THREE.MeshStandardMaterial({
         color,
         roughness: 0.42,
@@ -345,80 +342,79 @@ export default function ThreeDNotebookStack() {
       body.castShadow = true;
       pencil.add(body);
 
-      // Shaved Wood Tip (Cone)
-      const woodGeo = new THREE.ConeGeometry(0.05, 0.32, 6);
+      const woodGeo = new THREE.ConeGeometry(0.045, 0.3, 6);
       const woodMat = new THREE.MeshStandardMaterial({
         color: "#ebd095",
         roughness: 0.78,
       });
       const wood = new THREE.Mesh(woodGeo, woodMat);
-      wood.position.y = 1.05 + 0.16;
+      wood.position.y = 1.0 + 0.15;
       wood.castShadow = true;
       pencil.add(wood);
 
-      // Lead Tip (Graphite)
-      const leadGeo = new THREE.ConeGeometry(0.018, 0.09, 6);
+      const leadGeo = new THREE.ConeGeometry(0.016, 0.08, 6);
       const leadMat = new THREE.MeshStandardMaterial({
         color: "#2f2f32",
         roughness: 0.85,
       });
       const lead = new THREE.Mesh(leadGeo, leadMat);
-      lead.position.y = 1.05 + 0.32 + 0.045;
+      lead.position.y = 1.0 + 0.3 + 0.04;
       lead.castShadow = true;
       pencil.add(lead);
 
-      // Gold Ferrule (Metal Band)
-      const ferruleGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.15, 6);
+      const ferruleGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.14, 6);
       const ferruleMat = new THREE.MeshStandardMaterial({
         color: "#e3bc64",
         metalness: 0.95,
         roughness: 0.12,
       });
       const ferrule = new THREE.Mesh(ferruleGeo, ferruleMat);
-      ferrule.position.y = -1.05 - 0.075;
+      ferrule.position.y = -1.0 - 0.07;
       ferrule.castShadow = true;
       pencil.add(ferrule);
 
-      // Pink Eraser
-      const eraserGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.13, 6);
+      const eraserGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.12, 6);
       const eraserMat = new THREE.MeshStandardMaterial({
         color: "#fc9088",
         roughness: 0.68,
       });
       const eraser = new THREE.Mesh(eraserGeo, eraserMat);
-      eraser.position.y = -1.05 - 0.15 - 0.065;
+      eraser.position.y = -1.0 - 0.14 - 0.06;
       eraser.castShadow = true;
       pencil.add(eraser);
 
       return pencil;
     };
-    const pencil1 = createPencil("#d97919"); // Saffron pencil
-    pencil1.position.set(-2.0, 1.4, 0.8);
-    pencil1.rotation.set(0.6, 0.2, -0.8);
+    
+    // Pencil 1 (Saffron): Laid flat at the bottom-left desk area
+    const pencil1 = createPencil("#d97919");
+    pencil1.position.set(-1.8, -1.88, 1.1);
+    pencil1.rotation.set(Math.PI / 2, 0.25, 0);
     scene.add(pencil1);
 
-    const pencil2 = createPencil("#0c8f84"); // Teal pencil
-    pencil2.position.set(1.1, -1.3, 1.0);
-    pencil2.rotation.set(-0.8, 0.5, 0.6);
+    // Pencil 2 (Teal): Laid flat at the bottom-right desk area
+    const pencil2 = createPencil("#0c8f84");
+    pencil2.position.set(1.8, -1.88, 0.9);
+    pencil2.rotation.set(Math.PI / 2, -0.35, 0);
     scene.add(pencil2);
 
-    // 4. Floating Gold Paper Clips (Tubes from Curve paths)
+    // 4. Floating Gold Paper Clips (Wire loop Tubes)
     const createPaperClip = () => {
       const points = [
-        new THREE.Vector3(0, -0.32, 0),
-        new THREE.Vector3(0, 0.32, 0),
-        new THREE.Vector3(0.04, 0.36, 0),
-        new THREE.Vector3(0.08, 0.32, 0),
-        new THREE.Vector3(0.08, -0.24, 0),
-        new THREE.Vector3(0.04, -0.28, 0),
-        new THREE.Vector3(0.0, -0.24, 0),
-        new THREE.Vector3(0.0, 0.16, 0),
-        new THREE.Vector3(-0.02, 0.2, 0),
-        new THREE.Vector3(-0.04, 0.16, 0),
-        new THREE.Vector3(-0.04, 0, 0),
+        new THREE.Vector3(0, -0.28, 0),
+        new THREE.Vector3(0, 0.28, 0),
+        new THREE.Vector3(0.035, 0.32, 0),
+        new THREE.Vector3(0.07, 0.28, 0),
+        new THREE.Vector3(0.07, -0.22, 0),
+        new THREE.Vector3(0.035, -0.26, 0),
+        new THREE.Vector3(0, -0.22, 0),
+        new THREE.Vector3(0, 0.14, 0),
+        new THREE.Vector3(-0.018, 0.18, 0),
+        new THREE.Vector3(-0.035, 0.14, 0),
+        new THREE.Vector3(-0.035, 0, 0),
       ];
       const curve = new THREE.CatmullRomCurve3(points);
-      const clipGeo = new THREE.TubeGeometry(curve, 32, 0.012, 8, false);
+      const clipGeo = new THREE.TubeGeometry(curve, 32, 0.01, 8, false);
       const clipMat = new THREE.MeshStandardMaterial({
         color: "#d4af37",
         metalness: 0.95,
@@ -430,15 +426,17 @@ export default function ThreeDNotebookStack() {
     };
 
     const c1 = createPaperClip();
-    c1.clip.position.set(-1.4, -1.0, 1.2);
-    c1.clip.rotation.set(0.5, 0.6, -0.4);
-    c1.clip.scale.set(1.4, 1.4, 1.4);
+    // Placed flat next to Pencil 1
+    c1.clip.position.set(-1.3, -1.9, 1.3);
+    c1.clip.rotation.set(Math.PI / 2, 0.1, 0);
+    c1.clip.scale.set(1.3, 1.3, 1.3);
     scene.add(c1.clip);
 
     const c2 = createPaperClip();
-    c2.clip.position.set(2.0, 1.2, 0.6);
-    c2.clip.rotation.set(-0.4, 0.3, 0.8);
-    c2.clip.scale.set(1.4, 1.4, 1.4);
+    // Placed flat next to Pencil 2
+    c2.clip.position.set(1.4, -1.9, 1.1);
+    c2.clip.rotation.set(Math.PI / 2, -0.25, 0);
+    c2.clip.scale.set(1.3, 1.3, 1.3);
     scene.add(c2.clip);
 
     // 5. Floating Acrylic Ruler
@@ -449,7 +447,6 @@ export default function ThreeDNotebookStack() {
     if (rCtx) {
       rCtx.fillStyle = "rgba(250, 247, 238, 0.1)";
       rCtx.fillRect(0, 0, 128, 512);
-      // Ruler lines (tick marks)
       rCtx.strokeStyle = "#17130f";
       rCtx.lineWidth = 1.5;
       for (let y = 10; y < 502; y += 8) {
@@ -469,7 +466,7 @@ export default function ThreeDNotebookStack() {
       }
     }
     const rulerTexture = new THREE.CanvasTexture(rulerCanvas);
-    const rulerGeo = new THREE.BoxGeometry(0.35, 2.3, 0.015);
+    const rulerGeo = new THREE.BoxGeometry(0.32, 2.2, 0.015);
     const rulerMat = new THREE.MeshStandardMaterial({
       map: rulerTexture,
       transparent: true,
@@ -478,22 +475,22 @@ export default function ThreeDNotebookStack() {
       color: "#faf7ee",
     });
     const ruler = new THREE.Mesh(rulerGeo, rulerMat);
-    ruler.position.set(1.9, -0.6, 0.3);
-    ruler.rotation.set(0.6, -0.3, 0.7);
+    // Placed flat on the desk, pointing horizontally
+    ruler.position.set(1.0, -1.9, 1.5);
+    ruler.rotation.set(Math.PI / 2, 0, -Math.PI / 2 + 0.15);
     ruler.castShadow = true;
     scene.add(ruler);
 
     // Base positions to calculate float animations
-    const pencil1BaseY = pencil1.position.y;
-    const pencil2BaseY = pencil2.position.y;
     const ruledBaseY = ruledPaper.position.y;
     const gridBaseY = gridPaper.position.y;
+    
+    // Tiny micro-float amplitude for floor elements to make them breathe
+    const pencil1BaseY = pencil1.position.y;
+    const pencil2BaseY = pencil2.position.y;
     const clip1BaseY = c1.clip.position.y;
     const clip2BaseY = c2.clip.position.y;
     const rulerBaseY = ruler.position.y;
-
-    const ruledBaseRotZ = ruledPaper.rotation.z;
-    const gridBaseRotZ = gridPaper.rotation.z;
 
     // Handle Resize
     const handleResize = () => {
@@ -515,50 +512,31 @@ export default function ThreeDNotebookStack() {
 
       const time = Date.now() * 0.001;
 
-      // Gentle floating for the entire stack group
-      stackGroup.position.y = 0.1 + Math.sin(time * 1.2) * 0.06;
+      // Gentle floating for the entire stack group (keeps relative notebook distances intact)
+      stackGroup.position.y = 0.2 + Math.sin(time * 1.2) * 0.06;
 
       // Micro Z-direction float for books to prevent sliding overlap
-      b1.bookGroup.position.z = 0.36 + Math.sin(time * 1.5) * 0.01;
-      b2.bookGroup.position.z = 0.0 + Math.sin(time * 1.25 + 1.2) * 0.006;
-      b3.bookGroup.position.z = -0.36 + Math.sin(time * 1.05 + 2.5) * 0.01;
+      b1.bookGroup.position.z = 0.34 + Math.sin(time * 1.5) * 0.008;
+      b2.bookGroup.position.z = 0.0 + Math.sin(time * 1.25 + 1.2) * 0.005;
+      b3.bookGroup.position.z = -0.34 + Math.sin(time * 1.05 + 2.5) * 0.008;
 
       // Slow orbital rotate of stack (mouse tracking parallax dampening if not dragging)
       if (!isDragging) {
-        // Normal floating rotation parallax
         stackGroup.rotation.x = THREE.MathUtils.lerp(stackGroup.rotation.x, 0.85 + Math.sin(time * 0.4) * 0.015, 0.08);
         stackGroup.rotation.y = THREE.MathUtils.lerp(stackGroup.rotation.y, -0.15 + Math.cos(time * 0.3) * 0.02, 0.08);
       }
 
-      // 1. Animate Ruled & Grid Papers
-      ruledPaper.position.y = ruledBaseY + Math.sin(time * 0.8) * 0.06;
-      ruledPaper.rotation.z = ruledBaseRotZ + Math.sin(time * 0.45) * 0.04;
-
-      gridPaper.position.y = gridBaseY + Math.cos(time * 0.75) * 0.05;
-      gridPaper.rotation.z = gridBaseRotZ + Math.cos(time * 0.5) * 0.035;
-
-      // 2. Animate Pencils
-      pencil1.position.y = pencil1BaseY + Math.sin(time * 1.1) * 0.07;
-      pencil1.rotation.x += 0.002;
-      pencil1.rotation.y += 0.003;
-
-      pencil2.position.y = pencil2BaseY + Math.sin(time * 1.0 + 1.5) * 0.06;
-      pencil2.rotation.x += 0.003;
-      pencil2.rotation.z += 0.002;
-
-      // 3. Animate Gold clips
-      c1.clip.position.y = clip1BaseY + Math.sin(time * 1.3) * 0.045;
-      c1.clip.rotation.x += 0.004;
-      c1.clip.rotation.y += 0.006;
-
-      c2.clip.position.y = clip2BaseY + Math.cos(time * 1.2) * 0.04;
-      c2.clip.rotation.y += 0.005;
-      c2.clip.rotation.z += 0.003;
-
-      // 4. Animate Acrylic Ruler
-      ruler.position.y = rulerBaseY + Math.sin(time * 0.9) * 0.055;
-      ruler.rotation.x += 0.0015;
-      ruler.rotation.y += 0.002;
+      // Flat lay breathing animation (tiny hovering up and down, but strictly vertical, no horizontal shifting)
+      ruledPaper.position.y = ruledBaseY + Math.sin(time * 0.8) * 0.02;
+      gridPaper.position.y = gridBaseY + Math.cos(time * 0.75) * 0.02;
+      
+      pencil1.position.y = pencil1BaseY + Math.sin(time * 1.1) * 0.02;
+      pencil2.position.y = pencil2BaseY + Math.sin(time * 1.0 + 1.5) * 0.02;
+      
+      c1.clip.position.y = clip1BaseY + Math.sin(time * 1.3) * 0.015;
+      c2.clip.position.y = clip2BaseY + Math.cos(time * 1.2) * 0.015;
+      
+      ruler.position.y = rulerBaseY + Math.sin(time * 0.9) * 0.018;
 
       controls.update();
       renderer.render(scene, camera);
