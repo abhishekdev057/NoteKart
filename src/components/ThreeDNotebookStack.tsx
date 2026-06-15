@@ -38,11 +38,12 @@ export default function ThreeDNotebookStack() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Orbit Controls
+    // Orbit Controls - full 360 spherical view
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 1.8;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI; // Full spherical vertical rotation
     controls.minDistance = isMobile ? 5.5 : 4;
     controls.maxDistance = 12;
     controls.enableZoom = false; // Prevent page scroll hijack
@@ -198,7 +199,7 @@ export default function ThreeDNotebookStack() {
       "A4 Photo Album",
       ["#0c8f84", "#064642"]
     );
-    b1.bookGroup.position.set(-0.25, 0.5, 0.25);
+    b1.bookGroup.position.set(-0.24, 0.24, 0.36);
     b1.bookGroup.rotation.y = 0.22;
     stackGroup.add(b1.bookGroup);
 
@@ -228,7 +229,7 @@ export default function ThreeDNotebookStack() {
       "A5 Hardbound",
       ["#f6e3af", "#cca75a"]
     );
-    b3.bookGroup.position.set(0.25, -0.5, -0.25);
+    b3.bookGroup.position.set(0.24, -0.24, -0.36);
     b3.bookGroup.rotation.y = 0.05;
     stackGroup.add(b3.bookGroup);
 
@@ -514,10 +515,13 @@ export default function ThreeDNotebookStack() {
 
       const time = Date.now() * 0.001;
 
-      // Gentle floating for each central stack notebook
-      b1.bookGroup.position.y = 0.5 + Math.sin(time * 1.5) * 0.04;
-      b2.bookGroup.position.y = 0.0 + Math.sin(time * 1.25 + 1.2) * 0.035;
-      b3.bookGroup.position.y = -0.5 + Math.sin(time * 1.05 + 2.5) * 0.025;
+      // Gentle floating for the entire stack group
+      stackGroup.position.y = 0.1 + Math.sin(time * 1.2) * 0.06;
+
+      // Micro Z-direction float for books to prevent sliding overlap
+      b1.bookGroup.position.z = 0.36 + Math.sin(time * 1.5) * 0.01;
+      b2.bookGroup.position.z = 0.0 + Math.sin(time * 1.25 + 1.2) * 0.006;
+      b3.bookGroup.position.z = -0.36 + Math.sin(time * 1.05 + 2.5) * 0.01;
 
       // Slow orbital rotate of stack (mouse tracking parallax dampening if not dragging)
       if (!isDragging) {
