@@ -347,6 +347,7 @@ export function Storefront({ products }: { products: Product[] }) {
   const [customCoverName, setCustomCoverName] = useState("");
   const [customStatus, setCustomStatus] = useState("");
   const [customSubmitted, setCustomSubmitted] = useState(false);
+  const [customizingProductId, setCustomizingProductId] = useState("custom-photo-journal");
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -723,7 +724,7 @@ export function Storefront({ products }: { products: Product[] }) {
     const notes = String(formData.get("notes") ?? "").trim();
     const quantity = Number(formData.get("quantity") || 1);
     if (!customFileUrl) {
-      setCustomStatus("Please upload a cover photo before adding the A4 album to cart.");
+      setCustomStatus("Please upload a cover photo before adding the customized notebook to cart.");
       return;
     }
     setCustomStatus("Sending request...");
@@ -744,7 +745,7 @@ export function Storefront({ products }: { products: Product[] }) {
     }
 
     const customProduct =
-      products.find((product) => product.id === "custom-photo-journal") ??
+      products.find((product) => product.id === customizingProductId) ??
       products.find((product) => product.isCustomizable) ??
       products[0];
     if (customProduct) {
@@ -1063,9 +1064,20 @@ export function Storefront({ products }: { products: Product[] }) {
             </div>
           ) : (
             <form action={submitCustomRequest} className="custom-form">
+              <div className="grid gap-2 mb-2">
+                <label className="text-xs font-semibold text-[rgba(250,247,238,0.78)]">Select notebook to customize:</label>
+                <select
+                  value={customizingProductId}
+                  onChange={(e) => setCustomizingProductId(e.target.value)}
+                  className="w-full border border-[rgba(250,247,238,0.14)] p-3.5 bg-white/10 text-white rounded-lg focus:outline-none focus:border-[var(--teal)] focus:ring-1 focus:ring-[var(--teal)] transition-all font-semibold"
+                >
+                  <option value="custom-photo-journal" className="bg-[#17130f] text-white">A4 Custom Photo Album (₹182)</option>
+                  <option value="classic-a5-hardbound" className="bg-[#17130f] text-white">Classic A5 Hardbound Notebook (₹249)</option>
+                </select>
+              </div>
               {customFileUrl ? (
                 <div className="relative w-full rounded-lg overflow-hidden border border-black/10">
-                  <ThreeDNotebookCustomizer artworkUrl={customFileUrl} coverName={customCoverName} />
+                  <ThreeDNotebookCustomizer productId={customizingProductId} artworkUrl={customFileUrl} coverName={customCoverName} />
                   <div className="upload-preview-overlay z-10">
                     <Check size={18} />
                     <span>Artwork uploaded</span>

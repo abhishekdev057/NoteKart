@@ -199,8 +199,8 @@ export default function ThreeDNotebookStack() {
       "A4 Photo Album",
       ["#0c8f84", "#064642"]
     );
-    b1.bookGroup.position.set(-0.06, 0.05, 0.34);
-    b1.bookGroup.rotation.y = 0.15;
+    b1.bookGroup.position.set(-0.16, 0.16, 0.58);
+    b1.bookGroup.rotation.y = 0.05;
     stackGroup.add(b1.bookGroup);
 
     // Book 2: 192 Pages Classmate Series (Saffron) - Middle
@@ -215,7 +215,7 @@ export default function ThreeDNotebookStack() {
       ["#d97919", "#783b0a"]
     );
     b2.bookGroup.position.set(0.0, 0.0, 0.0);
-    b2.bookGroup.rotation.y = -0.08;
+    b2.bookGroup.rotation.y = -0.04;
     stackGroup.add(b2.bookGroup);
 
     // Book 3: A5 Hardbound (Gold/Beige) - Bottom
@@ -229,7 +229,7 @@ export default function ThreeDNotebookStack() {
       "A5 Hardbound",
       ["#f6e3af", "#cca75a"]
     );
-    b3.bookGroup.position.set(0.06, -0.05, -0.34);
+    b3.bookGroup.position.set(0.16, -0.16, -0.58);
     b3.bookGroup.rotation.y = 0.02;
     stackGroup.add(b3.bookGroup);
 
@@ -516,9 +516,9 @@ export default function ThreeDNotebookStack() {
       stackGroup.position.y = 0.2 + Math.sin(time * 1.2) * 0.06;
 
       // Micro Z-direction float for books to prevent sliding overlap
-      b1.bookGroup.position.z = 0.34 + Math.sin(time * 1.5) * 0.008;
+      b1.bookGroup.position.z = 0.58 + Math.sin(time * 1.5) * 0.008;
       b2.bookGroup.position.z = 0.0 + Math.sin(time * 1.25 + 1.2) * 0.005;
-      b3.bookGroup.position.z = -0.34 + Math.sin(time * 1.05 + 2.5) * 0.008;
+      b3.bookGroup.position.z = -0.58 + Math.sin(time * 1.05 + 2.5) * 0.008;
 
       // Slow orbital rotate of stack (mouse tracking parallax dampening if not dragging)
       if (!isDragging) {
