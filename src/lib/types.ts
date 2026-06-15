@@ -33,7 +33,15 @@ export type Order = {
   customerName: string;
   mobile: string;
   address: string;
-  items: Array<{ productId: string; name: string; quantity: number; price: number }>;
+  items: Array<{
+    productId: string;
+    name: string;
+    quantity: number;
+    price: number;
+    customArtworkUrl?: string | null;
+    customCoverName?: string | null;
+    customNotes?: string | null;
+  }>;
   amount: number;
   paymentStatus: string;
   deliveryStatus: string;

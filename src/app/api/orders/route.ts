@@ -33,7 +33,15 @@ export async function POST(request: Request) {
     // Look up real catalog prices — never trust client-supplied amounts.
     const catalog = await getProductsByIds(input.items.map((item) => item.productId));
 
-    const lineItems: Array<{ productId: string; name: string; quantity: number; price: number }> = [];
+    const lineItems: Array<{
+      productId: string;
+      name: string;
+      quantity: number;
+      price: number;
+      customArtworkUrl?: string | null;
+      customCoverName?: string | null;
+      customNotes?: string | null;
+    }> = [];
     for (const item of input.items) {
       const product = catalog.get(item.productId);
       if (!product) {
@@ -45,7 +53,15 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
-      lineItems.push({ productId: product.id, name: product.name, quantity: item.quantity, price: product.price });
+      lineItems.push({
+        productId: product.id,
+        name: product.name,
+        quantity: item.quantity,
+        price: product.price,
+        customArtworkUrl: item.customArtworkUrl ?? null,
+        customCoverName: item.customCoverName ?? null,
+        customNotes: item.customNotes ?? null,
+      });
     }
 
     const amount = lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0);

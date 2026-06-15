@@ -936,6 +936,15 @@ function OrdersPanel({ orders }: { orders: Order[] }) {
             <div>
               <strong>{order.customerName} · ₹{order.amount}</strong>
               <span>{order.mobile} · {order.items.length} item lines · {order.address}</span>
+              {order.items.some((item) => item.customArtworkUrl || item.customCoverName) ? (
+                <span>
+                  Custom photo:{" "}
+                  {order.items
+                    .filter((item) => item.customArtworkUrl || item.customCoverName)
+                    .map((item) => item.customCoverName || item.name)
+                    .join(", ")}
+                </span>
+              ) : null}
               <span>{order.paymentStatus} payment · {formatProvider(order.deliveryProvider)} · {order.deliveryStatus}</span>
             </div>
             <span className="admin-pill">{order.paymentReference ?? order.phonepePaymentId ?? "No payment id"}</span>

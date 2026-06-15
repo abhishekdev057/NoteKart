@@ -47,6 +47,9 @@ export const orderSchema = z.object({
       z.object({
         productId: z.string().trim().min(1),
         quantity: z.number().int().min(1).max(1000),
+        customArtworkUrl: z.string().url().nullable().optional(),
+        customCoverName: z.string().trim().max(80).nullable().optional(),
+        customNotes: z.string().trim().max(1000).nullable().optional(),
       }),
     )
     .min(1, { error: "Your cart is empty." })

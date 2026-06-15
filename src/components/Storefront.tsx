@@ -20,7 +20,6 @@ import {
   Plus,
   Search,
   ShoppingBag,
-  Sparkles,
   Smartphone,
   Truck,
   Upload,
@@ -30,7 +29,13 @@ import {
 } from "lucide-react";
 import type { Order, Product } from "@/lib/types";
 
-type CartItem = Product & { quantity: number };
+type CartItem = Product & {
+  quantity: number;
+  productId?: string;
+  customArtworkUrl?: string | null;
+  customCoverName?: string | null;
+  customNotes?: string | null;
+};
 const CART_STORAGE_KEY = "notekart:guest-cart";
 const CART_CHANGE_EVENT = "notekart:cart-change";
 const EMPTY_CART: CartItem[] = [];
@@ -201,6 +206,10 @@ function QuantityStepper({
   );
 }
 
+function isCustomCartItem(item: CartItem) {
+  return Boolean(item.customArtworkUrl || item.customCoverName || item.customNotes);
+}
+
 function orderPaymentLabel(status: string) {
   const value = status.toLowerCase();
   if (value === "paid") return "Payment successful";
@@ -324,6 +333,7 @@ export function Storefront({ products }: { products: Product[] }) {
     landmark: "",
   });
   const [customFileUrl, setCustomFileUrl] = useState("");
+  const [customCoverName, setCustomCoverName] = useState("");
   const [customStatus, setCustomStatus] = useState("");
   const [customSubmitted, setCustomSubmitted] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState("");
@@ -436,6 +446,36 @@ export function Storefront({ products }: { products: Product[] }) {
       : [...current, { ...product, quantity: 1 }];
     persistCart(next);
     if (openCart) setCartOpen(true);
+  }
+
+  function addCustomAlbumToCart({
+    product,
+    quantity,
+    coverName,
+    notes,
+    artworkUrl,
+  }: {
+    product: Product;
+    quantity: number;
+    coverName: string;
+    notes: string;
+    artworkUrl: string;
+  }) {
+    const lineId = `custom:${product.id}:${Date.now()}`;
+    const customItem: CartItem = {
+      ...product,
+      id: lineId,
+      productId: product.id,
+      name: coverName ? `A4 Photo Album - ${coverName}` : "A4 Custom Photo Album",
+      specs: { ...product.specs, Size: "A4" },
+      images: [artworkUrl, ...product.images].filter(Boolean),
+      quantity,
+      customArtworkUrl: artworkUrl,
+      customCoverName: coverName || null,
+      customNotes: notes || null,
+    };
+    persistCart([...readStoredCartSnapshot(), customItem]);
+    setCartOpen(true);
   }
 
   function updateQuantity(id: string, delta: number) {
@@ -668,6 +708,13 @@ export function Storefront({ products }: { products: Product[] }) {
   }
 
   async function submitCustomRequest(formData: FormData) {
+    const coverName = String(formData.get("coverName") ?? "").trim();
+    const notes = String(formData.get("notes") ?? "").trim();
+    const quantity = Number(formData.get("quantity") || 1);
+    if (!customFileUrl) {
+      setCustomStatus("Please upload a cover photo before adding the A4 album to cart.");
+      return;
+    }
     setCustomStatus("Sending request...");
     const response = await fetch("/api/custom-requests", {
       method: "POST",
@@ -675,8 +722,8 @@ export function Storefront({ products }: { products: Product[] }) {
       body: JSON.stringify({
         customerName: formData.get("customerName"),
         mobile: formData.get("mobile"),
-        quantity: Number(formData.get("quantity") || 1),
-        notes: formData.get("notes"),
+        quantity,
+        notes: [coverName ? `Cover name: ${coverName}` : "", notes].filter(Boolean).join("\n"),
         imageUrl: customFileUrl,
       }),
     });
@@ -685,9 +732,24 @@ export function Storefront({ products }: { products: Product[] }) {
       return;
     }
 
+    const customProduct =
+      products.find((product) => product.id === "custom-photo-journal") ??
+      products.find((product) => product.isCustomizable) ??
+      products[0];
+    if (customProduct) {
+      addCustomAlbumToCart({
+        product: customProduct,
+        quantity,
+        coverName,
+        notes,
+        artworkUrl: customFileUrl,
+      });
+    }
+
     setCustomFileUrl("");
+    setCustomCoverName("");
     setCustomSubmitted(true);
-    setCustomStatus("");
+    setCustomStatus("Custom album added to cart. Continue to payment from cart.");
   }
 
   async function checkout() {
@@ -716,7 +778,13 @@ export function Storefront({ products }: { products: Product[] }) {
       body: JSON.stringify({
         customerName: checkoutAddress.customerName.trim(),
         address: formattedAddress(),
-        items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
+        items: cart.map((item) => ({
+          productId: item.productId ?? item.id,
+          quantity: item.quantity,
+          customArtworkUrl: item.customArtworkUrl ?? null,
+          customCoverName: item.customCoverName ?? null,
+          customNotes: item.customNotes ?? null,
+        })),
       }),
     });
     const order = await orderResponse.json();
@@ -813,14 +881,14 @@ export function Storefront({ products }: { products: Product[] }) {
               Notebooks made for real notes, real classes, real memories.
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-black/68 md:text-lg">
-              Premium school, coaching, office and customized notebooks manufactured by NoteKart in Doomra, Jhunjhunu.
+              Premium school notebooks, coaching supplies, office stationery and A4 photo albums crafted by NoteKart in Doomra, Jhunjhunu.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a className="primary-button" href="#products">
                 Shop notebooks <ArrowRight size={18} />
               </a>
               <a className="secondary-button" href="#custom">
-                Customize cover <Sparkles size={18} />
+                A4 photo album <NotebookPen size={18} />
               </a>
             </div>
             <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
@@ -844,7 +912,7 @@ export function Storefront({ products }: { products: Product[] }) {
             <motion.div style={{ y: stackDrift }} className="notebook-stack">
               <div className="book book-one">
                 <span>NOTEKART</span>
-                <strong>Custom Photo Journal</strong>
+                <strong>A4 Photo Album</strong>
               </div>
               <div className="book book-two">
                 <span>Classmate Series</span>
@@ -860,11 +928,11 @@ export function Storefront({ products }: { products: Product[] }) {
             <div className="ruler-rail" />
             <div className="floating-card top-8 right-0">
               <Smartphone size={18} />
-              Cashfree ready
+              Secure checkout
             </div>
             <div className="floating-card bottom-8 left-0">
               <Boxes size={18} />
-              Delhivery ready
+              Tracked delivery
             </div>
           </motion.div>
         </div>
@@ -884,7 +952,7 @@ export function Storefront({ products }: { products: Product[] }) {
         <div className="mx-auto max-w-7xl">
           <div className="section-heading">
             <h2>Notebook portfolio</h2>
-            <p>Pane through images, zoom into the product texture, and add production-ready notebooks to cart.</p>
+            <p>Browse finishes, paper details, and album-ready custom products before adding them to cart.</p>
           </div>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {products.map((product) => (
@@ -970,9 +1038,9 @@ export function Storefront({ products }: { products: Product[] }) {
       <section id="custom" className="custom-band px-4 py-16 md:px-8 md:py-24">
         <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[0.95fr_1.05fr]">
           <div>
-            <h2>Upload a photo. We turn it into a notebook cover.</h2>
+            <h2>A4 photo albums made from your best picture.</h2>
             <p>
-              Great for birthdays, coaching batches, school prizes, creators, businesses, wedding gifts and personal journals.
+              Upload artwork, add a printed cover name if you want, then checkout like a normal product.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {["Photo covers", "Logo notebooks", "Batch sets", "Matte/gloss finish"].map((item) => (
@@ -987,8 +1055,8 @@ export function Storefront({ products }: { products: Product[] }) {
               <div className="custom-success-icon">
                 <Check size={30} />
               </div>
-              <h3>Request received</h3>
-              <p>NoteKart will call you with a design proof and confirm notebook size, paper type, quantity, and delivery.</p>
+              <h3>Album added</h3>
+              <p>Your A4 photo album is in cart. Complete address and payment from the cart to confirm production.</p>
               <button
                 className="primary-button justify-center"
                 type="button"
@@ -997,7 +1065,7 @@ export function Storefront({ products }: { products: Product[] }) {
                   setCustomStatus("");
                 }}
               >
-                Create another request <Plus size={18} />
+                Add another album <Plus size={18} />
               </button>
             </div>
           ) : (
@@ -1019,6 +1087,7 @@ export function Storefront({ products }: { products: Product[] }) {
                       <Check size={18} />
                       <span>Artwork uploaded</span>
                     </div>
+                    {customCoverName ? <div className="cover-name-preview">{customCoverName}</div> : null}
                     <button
                       className="upload-remove"
                       type="button"
@@ -1047,10 +1116,16 @@ export function Storefront({ products }: { products: Product[] }) {
                 <input name="customerName" placeholder="Your name" required />
                 <input name="mobile" placeholder="Mobile number" required />
               </div>
+              <input
+                name="coverName"
+                value={customCoverName}
+                onChange={(event) => setCustomCoverName(event.target.value.slice(0, 40))}
+                placeholder="Name to print on photo cover (optional)"
+              />
               <input name="quantity" type="number" min="1" defaultValue="1" placeholder="Quantity" />
               <textarea name="notes" placeholder="Cover idea, notebook size, paper type, delivery details" rows={4} />
               <button className="primary-button justify-center" type="submit">
-                Send custom request <Upload size={18} />
+                Add to cart and pay <Upload size={18} />
               </button>
               {customStatus ? <p className="form-status">{customStatus}</p> : null}
             </form>
@@ -1121,6 +1196,11 @@ export function Storefront({ products }: { products: Product[] }) {
                     <div>
                       <strong>{item.name}</strong>
                       <span>₹{item.price} each</span>
+                      {isCustomCartItem(item) ? (
+                        <span className="cart-custom-note">
+                          {item.customCoverName ? `Cover name: ${item.customCoverName}` : "A4 custom photo album"}
+                        </span>
+                      ) : null}
                     </div>
                     <QuantityStepper
                       label={`${item.name} cart quantity`}
@@ -1336,6 +1416,8 @@ export function Storefront({ products }: { products: Product[] }) {
                       {order.items.map((item) => (
                         <span key={`${order.id}-${item.productId}`}>
                           {item.quantity} x {item.name}
+                          {item.customCoverName ? ` · Cover name: ${item.customCoverName}` : ""}
+                          {item.customArtworkUrl ? " · Custom photo" : ""}
                         </span>
                       ))}
                     </div>

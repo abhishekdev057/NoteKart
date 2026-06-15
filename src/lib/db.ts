@@ -44,14 +44,14 @@ const seedProducts: Product[] = [
   },
   {
     id: "custom-photo-journal",
-    name: "Custom Photo Journal",
+    name: "A4 Custom Photo Album",
     slug: "custom-photo-journal",
     category: "Customized",
     price: 399,
     compareAtPrice: 499,
     stock: 75,
-    description: "Upload a photo, logo or artwork and turn it into a polished personal notebook cover.",
-    specs: { Size: "A5 / A4", Pages: "120-240", Finish: "Matte or Gloss", MOQ: "1 piece" },
+    description: "A4 custom photo album with your cover photo and optional printed name.",
+    specs: { Size: "A4", Pages: "120-240", Finish: "Matte or Gloss", MOQ: "1 piece" },
     images: [
       "https://images.unsplash.com/photo-1516796181074-bf453fbfa3e6?auto=format&fit=crop&w=1200&q=80",
       "https://images.unsplash.com/photo-1516387938699-a93567ec168e?auto=format&fit=crop&w=1200&q=80",
