@@ -38,6 +38,8 @@ export async function POST(request: Request) {
       name: string;
       quantity: number;
       price: number;
+      costPrice?: number;
+      imageUrl?: string | null;
       customArtworkUrl?: string | null;
       customCoverName?: string | null;
       customNotes?: string | null;
@@ -58,6 +60,8 @@ export async function POST(request: Request) {
         name: product.name,
         quantity: item.quantity,
         price: product.price,
+        costPrice: product.costPrice ?? 0,
+        imageUrl: item.customArtworkUrl ?? product.images[0] ?? null,
         customArtworkUrl: item.customArtworkUrl ?? null,
         customCoverName: item.customCoverName ?? null,
         customNotes: item.customNotes ?? null,
@@ -85,9 +89,12 @@ export async function POST(request: Request) {
       address: input.address,
       items: lineItems,
       amount,
+      paymentGateway: input.paymentMethod === "cod" ? "cod" : undefined,
+      paymentStatus: input.paymentMethod === "cod" ? "cod_pending" : "pending",
+      deliveryStatus: "pending",
     });
 
-    return NextResponse.json({ id, amount });
+    return NextResponse.json({ id, amount, paymentMethod: input.paymentMethod });
   } catch (error) {
     return errorResponse(error, "Unable to create order.");
   }

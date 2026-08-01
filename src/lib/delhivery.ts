@@ -155,11 +155,11 @@ export async function createDelhiveryShipment(order: Order) {
     state,
     country: "India",
     phone: order.mobile,
-    payment_mode: "Pre-paid",
+    payment_mode: order.paymentGateway === "cod" ? "COD" : "Pre-paid",
     products_desc: order.items.map((item) => `${item.quantity} x ${item.name}`).join(", ").slice(0, 250),
     quantity: Math.max(1, order.items.reduce((sum, item) => sum + item.quantity, 0)),
     total_amount: order.amount,
-    cod_amount: 0,
+    cod_amount: order.paymentGateway === "cod" ? order.amount : 0,
     shipping_mode: process.env.DELHIVERY_SHIPPING_MODE || "Surface",
     weight: Number(process.env.DELHIVERY_DEFAULT_WEIGHT_GRAMS || 500),
   };

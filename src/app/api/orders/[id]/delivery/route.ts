@@ -20,7 +20,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/orders
     let deliveryNotes = input.deliveryNotes ?? null;
 
     if (input.provider === "delhivery" && !trackingNumber) {
-      if (order.paymentStatus !== "paid") {
+      if (order.paymentStatus !== "paid" && order.paymentGateway !== "cod") {
         return NextResponse.json(
           { error: "Delhivery shipment can be created only after payment is successful." },
           { status: 409 },
@@ -31,7 +31,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/orders
         return NextResponse.json({ error: shipment.error, serviceability: shipment.serviceability }, { status: 422 });
       }
       trackingNumber = shipment.waybill;
-      deliveryStatus = "assigned";
+      deliveryStatus = "shipped";
       deliveryNotes = [deliveryNotes, shipment.message ?? "Delhivery AWB generated automatically."]
         .filter(Boolean)
         .join("\n");

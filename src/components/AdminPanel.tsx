@@ -5,7 +5,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Boxes,
+  CalendarDays,
   CheckCircle2,
+  Clock3,
   ImagePlus,
   IndianRupee,
   LayoutDashboard,
@@ -16,12 +18,14 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Search,
   ShipWheel,
   ShoppingCart,
   Smartphone,
   Trash2,
   UploadCloud,
   X,
+  XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -35,6 +39,13 @@ type Analytics = {
   customRequestCount: number;
   orderCount: number;
   revenue: number;
+  reports: {
+    dailySales: number;
+    weeklySales: number;
+    monthlySales: number;
+    profit: number;
+  };
+  salesTrend: Array<{ day: string; amount: number }>;
 };
 
 type AdminPanelProps = {
@@ -48,6 +59,7 @@ type ProductForm = {
   name: string;
   category: string;
   price: number;
+  costPrice: number;
   compareAtPrice: number | null;
   stock: number;
   description: string;
@@ -72,6 +84,7 @@ const emptyProduct: ProductForm = {
   name: "",
   category: "Customized",
   price: 199,
+  costPrice: 110,
   compareAtPrice: 249,
   stock: 20,
   description: "",
@@ -171,12 +184,10 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [paymentGatewayMessage, setPaymentGatewayMessage] = useState("");
 
   const chartData = useMemo(
-    () => [
-      { name: "Products", value: analytics?.productCount ?? 0 },
-      { name: "Orders", value: analytics?.orderCount ?? 0 },
-      { name: "Custom", value: analytics?.customRequestCount ?? 0 },
-      { name: "Stock", value: analytics?.stock ?? 0 },
-    ],
+    () => (analytics?.salesTrend ?? []).map((item) => ({
+      name: new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${item.day}T00:00:00`)),
+      value: item.amount,
+    })),
     [analytics],
   );
 
@@ -433,6 +444,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
       name: product.name,
       category: product.category,
       price: product.price,
+      costPrice: product.costPrice ?? 0,
       compareAtPrice: product.compareAtPrice ?? null,
       stock: product.stock,
       description: product.description,
@@ -598,10 +610,11 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
           />
         ) : null}
         {section === "custom-requests" ? <CustomRequestsPanel requests={requests} /> : null}
-        {section === "orders" ? <OrdersPanel orders={orders} /> : null}
+        {section === "orders" ? <OrdersPanel orders={orders} products={products} /> : null}
         {section === "delivery" ? (
           <DeliveryPanel
             orders={orders}
+            products={products}
             trackingAwb={trackingAwb}
             tracking={tracking}
             onTrackingAwbChange={setTrackingAwb}
@@ -638,6 +651,25 @@ function adminHeadline(section: AdminSection) {
   return titles[section];
 }
 
+type CanonicalOrderStatus = "pending" | "printing" | "shipped" | "delivered" | "cancelled";
+
+function canonicalOrderStatus(status?: string): CanonicalOrderStatus {
+  const value = (status ?? "pending").toLowerCase();
+  if (value === "delivered") return "delivered";
+  if (value === "shipped") return "shipped";
+  if (value === "cancelled") return "cancelled";
+  if (["printing", "processing", "packed", "assigned"].includes(value)) return "printing";
+  return "pending";
+}
+
+const orderStatusMeta: Array<{ value: CanonicalOrderStatus; label: string; icon: LucideIcon }> = [
+  { value: "pending", label: "Pending", icon: Clock3 },
+  { value: "printing", label: "Printing / Processing", icon: PackageCheck },
+  { value: "shipped", label: "Shipped", icon: ShipWheel },
+  { value: "delivered", label: "Delivered", icon: CheckCircle2 },
+  { value: "cancelled", label: "Cancelled", icon: XCircle },
+];
+
 function Dashboard({
   analytics,
   orders,
@@ -670,6 +702,21 @@ function Dashboard({
           </div>
         ))}
       </div>
+      <section className="admin-panel">
+        <div className="panel-title">
+          <ShoppingCart size={20} />
+          <h2>Live order status</h2>
+        </div>
+        <div className="order-status-grid">
+          {orderStatusMeta.map(({ value, label, icon: Icon }) => (
+            <Link href="/admin/orders" className={`order-status-card ${value}`} key={value}>
+              <Icon size={19} />
+              <span>{label}</span>
+              <strong>{orders.filter((order) => canonicalOrderStatus(order.deliveryStatus) === value).length}</strong>
+            </Link>
+          ))}
+        </div>
+      </section>
       <section className="admin-panel">
         <div className="panel-title">
           <ShipWheel size={20} />
@@ -714,13 +761,23 @@ function Reports({
       <section className="admin-panel">
         <div className="panel-title">
           <BarChart3 size={20} />
-          <h2>Reports and analysis</h2>
+          <h2>Sales & profit reports</h2>
         </div>
-        <div className="admin-report-summary">
-          <span>Revenue ₹{analytics?.revenue ?? 0}</span>
-          <span>{analytics?.stock ?? 0} notebooks in stock</span>
-          <span>{analytics?.orderCount ?? 0} total orders</span>
+        <div className="report-card-grid">
+          {([
+            ["Daily sales", analytics?.reports?.dailySales ?? 0, CalendarDays],
+            ["Weekly sales", analytics?.reports?.weeklySales ?? 0, BarChart3],
+            ["Monthly sales", analytics?.reports?.monthlySales ?? 0, ShoppingCart],
+            ["Estimated profit", analytics?.reports?.profit ?? 0, IndianRupee],
+          ] as Array<[string, number, LucideIcon]>).map(([label, value, Icon]) => (
+            <div className="report-card" key={String(label)}>
+              <Icon size={20} />
+              <span>{String(label)}</span>
+              <strong>₹{Number(value).toLocaleString("en-IN")}</strong>
+            </div>
+          ))}
         </div>
+        <p className="report-help">Profit uses the production cost saved on each product. Cancelled orders are excluded.</p>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
@@ -733,7 +790,7 @@ function Reports({
               <CartesianGrid stroke="#ded6c4" vertical={false} />
               <XAxis dataKey="name" tickLine={false} axisLine={false} />
               <YAxis tickLine={false} axisLine={false} />
-              <Tooltip />
+              <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Sales"]} />
               <Area type="monotone" dataKey="value" stroke="#0c8f84" fill="url(#notekartChart)" strokeWidth={3} />
             </AreaChart>
           </ResponsiveContainer>
@@ -830,10 +887,14 @@ function ProductsPanel({
           <span>Category</span>
           <input value={form.category} onChange={(event) => onFormChange({ ...form, category: event.target.value })} placeholder="Customized, Spiral, Hardbound..." />
         </label>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <label className="admin-field">
             <span>Selling price (₹)</span>
             <input type="number" value={form.price} onChange={(event) => onFormChange({ ...form, price: Number(event.target.value) })} min={0} placeholder="199" />
+          </label>
+          <label className="admin-field">
+            <span>Production cost (₹)</span>
+            <input type="number" value={form.costPrice} onChange={(event) => onFormChange({ ...form, costPrice: Number(event.target.value) })} min={0} placeholder="Used for profit report" />
           </label>
           <label className="admin-field">
             <span>MRP / compare price (₹)</span>
@@ -922,34 +983,74 @@ function CustomRequestsPanel({ requests }: { requests: CustomRequest[] }) {
   );
 }
 
-function OrdersPanel({ orders }: { orders: Order[] }) {
+function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[] }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | CanonicalOrderStatus>("all");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOrders = orders.filter((order) => {
+    const matchesStatus = statusFilter === "all" || canonicalOrderStatus(order.deliveryStatus) === statusFilter;
+    const matchesQuery = !normalizedQuery || [order.id, order.mobile, order.customerName]
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+    return matchesStatus && matchesQuery;
+  });
+
   return (
     <section className="admin-panel">
       <div className="panel-title">
         <ShoppingCart size={20} />
-        <h2>Orders and payment status</h2>
+        <h2>Orders, notebooks and customer search</h2>
       </div>
-      <div className="admin-table">
-        {orders.map((order) => (
-          <div className="admin-row order-row" key={order.id}>
-            <span className="empty-thumb" />
-            <div>
-              <strong>{order.customerName} · ₹{order.amount}</strong>
-              <span>{order.mobile} · {order.items.length} item lines · {order.address}</span>
-              {order.items.some((item) => item.customArtworkUrl || item.customCoverName) ? (
-                <span>
-                  Custom photo:{" "}
-                  {order.items
-                    .filter((item) => item.customArtworkUrl || item.customCoverName)
-                    .map((item) => item.customCoverName || item.name)
-                    .join(", ")}
-                </span>
-              ) : null}
-              <span>{order.paymentStatus} payment · {formatProvider(order.deliveryProvider)} · {order.deliveryStatus}</span>
-            </div>
-            <span className="admin-pill">{order.paymentReference ?? order.phonepePaymentId ?? "No payment id"}</span>
-          </div>
+      <label className="admin-order-search">
+        <Search size={19} />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by Order ID, mobile number or customer name" />
+        {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X size={17} /></button> : null}
+      </label>
+      <div className="order-filter-row">
+        <button className={statusFilter === "all" ? "active" : ""} type="button" onClick={() => setStatusFilter("all")}>All <strong>{orders.length}</strong></button>
+        {orderStatusMeta.map(({ value, label }) => (
+          <button className={statusFilter === value ? `active ${value}` : value} type="button" onClick={() => setStatusFilter(value)} key={value}>
+            {label} <strong>{orders.filter((order) => canonicalOrderStatus(order.deliveryStatus) === value).length}</strong>
+          </button>
         ))}
+      </div>
+      <div className="admin-orders-list">
+        {visibleOrders.map((order) => (
+          <article className="admin-order-card" key={order.id}>
+            <div className="admin-order-head">
+              <div>
+                <span className={`order-state-pill ${canonicalOrderStatus(order.deliveryStatus)}`}>{canonicalOrderStatus(order.deliveryStatus) === "printing" ? "Printing / Processing" : canonicalOrderStatus(order.deliveryStatus)}</span>
+                <strong>{order.customerName} · ₹{order.amount.toLocaleString("en-IN")}</strong>
+                <span>Order #{order.id}</span>
+              </div>
+              <div className="admin-order-contact">
+                <strong>{order.mobile}</strong>
+                <span>{order.paymentGateway === "cod" ? "Cash on Delivery" : `${order.paymentStatus} · ${order.paymentGateway ?? "online"}`}</span>
+              </div>
+            </div>
+            <div className="admin-order-products">
+              {order.items.map((item, index) => (
+                <div className="admin-order-product" key={`${order.id}-${item.productId}-${index}`}>
+                  {item.customArtworkUrl || item.imageUrl || products.find((product) => product.id === item.productId)?.images[0] ? (
+                    <img src={item.customArtworkUrl ?? item.imageUrl ?? products.find((product) => product.id === item.productId)?.images[0] ?? ""} alt={item.name} />
+                  ) : <span className="empty-thumb"><PackageCheck size={20} /></span>}
+                  <div>
+                    <strong>{item.quantity} × {item.name}</strong>
+                    <span>₹{item.price} each · Line total ₹{item.price * item.quantity}</span>
+                    {item.customCoverName ? <span className="custom-order-detail">Print name: {item.customCoverName}</span> : null}
+                    {item.customArtworkUrl ? <a href={item.customArtworkUrl} target="_blank" rel="noreferrer">Open customer artwork</a> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="admin-order-address">
+              <span><strong>Deliver to:</strong> {order.address}</span>
+              <span>{formatProvider(order.deliveryProvider)}{order.deliveryTrackingNumber ? ` · ${order.deliveryTrackingNumber}` : ""}</span>
+            </div>
+          </article>
+        ))}
+        {!visibleOrders.length ? (
+          <div className="admin-empty-state"><Search size={25} /><strong>No matching orders</strong><span>Try another Order ID, mobile number, customer name or status.</span></div>
+        ) : null}
       </div>
     </section>
   );
@@ -957,6 +1058,7 @@ function OrdersPanel({ orders }: { orders: Order[] }) {
 
 function DeliveryPanel({
   orders,
+  products,
   trackingAwb,
   tracking,
   onTrackingAwbChange,
@@ -964,6 +1066,7 @@ function DeliveryPanel({
   onDeliverySaved,
 }: {
   orders: Order[];
+  products: Product[];
   trackingAwb: string;
   tracking: string;
   onTrackingAwbChange: (value: string) => void;
@@ -985,6 +1088,16 @@ function DeliveryPanel({
                 <span>{order.mobile}</span>
                 <span>{order.address}</span>
                 <span>{order.paymentStatus} payment · {order.items.length} item lines</span>
+                <div className="delivery-order-items">
+                  {order.items.map((item, index) => (
+                    <div key={`${order.id}-${item.productId}-${index}`}>
+                      {item.customArtworkUrl || item.imageUrl || products.find((product) => product.id === item.productId)?.images[0] ? (
+                        <img src={item.customArtworkUrl ?? item.imageUrl ?? products.find((product) => product.id === item.productId)?.images[0] ?? ""} alt={item.name} />
+                      ) : <span className="empty-thumb" />}
+                      <span>{item.quantity} × {item.name}{item.customCoverName ? ` · ${item.customCoverName}` : ""}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <DeliveryAssignmentForm order={order} onSaved={onDeliverySaved} />
             </div>
@@ -1010,7 +1123,7 @@ function DeliveryPanel({
 function DeliveryAssignmentForm({ order, onSaved }: { order: Order; onSaved: () => Promise<void> }) {
   const [provider, setProvider] = useState<DeliveryProvider>(order.deliveryProvider ?? "review");
   const [trackingNumber, setTrackingNumber] = useState(order.deliveryTrackingNumber ?? "");
-  const [deliveryStatus, setDeliveryStatus] = useState(order.deliveryStatus ?? "review");
+  const [deliveryStatus, setDeliveryStatus] = useState<string>(canonicalOrderStatus(order.deliveryStatus));
   const [deliveryNotes, setDeliveryNotes] = useState(order.deliveryNotes ?? "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -1045,11 +1158,11 @@ function DeliveryAssignmentForm({ order, onSaved }: { order: Order; onSaved: () 
       </select>
       <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="AWB / speed post / manual ref" />
       <select value={deliveryStatus} onChange={(event) => setDeliveryStatus(event.target.value)}>
-        <option value="review">Review</option>
-        <option value="packed">Packed</option>
-        <option value="assigned">Assigned</option>
+        <option value="pending">Pending</option>
+        <option value="printing">Printing / Processing</option>
         <option value="shipped">Shipped</option>
         <option value="delivered">Delivered</option>
+        <option value="cancelled">Cancelled</option>
       </select>
       <textarea value={deliveryNotes} onChange={(event) => setDeliveryNotes(event.target.value)} placeholder="Internal delivery notes" rows={2} />
       <button className="primary-button justify-center" disabled={saving} type="submit">{saving ? "Saving..." : "Save delivery"}</button>

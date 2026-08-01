@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { normalizePaymentGateway } from "./payments";
-import type { CustomRequest, Order, PaymentGateway, Product } from "./types";
+import type { CustomRequest, Order, PaymentGateway, Product, ProductReview } from "./types";
 
 type SqlClient = ReturnType<typeof neon>;
 type DbRow = Record<string, unknown>;
@@ -15,6 +15,7 @@ const seedProducts: Product[] = [
     slug: "classic-a5-hardbound",
     category: "Hardbound",
     price: 249,
+    costPrice: 145,
     compareAtPrice: 320,
     stock: 180,
     description: "A durable daily notebook with smooth ruled pages and a premium wraparound cover.",
@@ -32,6 +33,7 @@ const seedProducts: Product[] = [
     slug: "spiral-campus-pack",
     category: "Spiral",
     price: 129,
+    costPrice: 72,
     compareAtPrice: 160,
     stock: 260,
     description: "Lightweight spiral notebooks for school, coaching and everyday class notes.",
@@ -48,6 +50,7 @@ const seedProducts: Product[] = [
     slug: "custom-photo-journal",
     category: "Customized",
     price: 199,
+    costPrice: 110,
     compareAtPrice: 249,
     stock: 75,
     description: "A4 custom photo album with your cover photo and optional printed name.",
@@ -80,6 +83,7 @@ async function ensureSchema() {
       slug TEXT UNIQUE NOT NULL,
       category TEXT NOT NULL,
       price INTEGER NOT NULL,
+      cost_price INTEGER NOT NULL DEFAULT 0,
       compare_at_price INTEGER,
       stock INTEGER NOT NULL DEFAULT 0,
       description TEXT NOT NULL,
@@ -90,6 +94,7 @@ async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price INTEGER NOT NULL DEFAULT 0`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS custom_requests (
@@ -113,7 +118,7 @@ async function ensureSchema() {
       items JSONB NOT NULL DEFAULT '[]'::jsonb,
       amount INTEGER NOT NULL,
       payment_status TEXT NOT NULL DEFAULT 'pending',
-      delivery_status TEXT NOT NULL DEFAULT 'draft',
+      delivery_status TEXT NOT NULL DEFAULT 'pending',
       shiprocket_awb TEXT,
       delivery_provider TEXT NOT NULL DEFAULT 'review',
       delivery_tracking_number TEXT,
@@ -137,6 +142,37 @@ async function ensureSchema() {
       value TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS product_reviews (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      customer_name TEXT NOT NULL,
+      mobile TEXT NOT NULL,
+      rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+      title TEXT NOT NULL,
+      comment TEXT NOT NULL,
+      is_verified_purchase BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(product_id, mobile)
+    )
+  `;
+
+  // Remove exactly the 132 legacy custom requests once on the first production
+  // startup after this release. The marker makes the cleanup idempotent.
+  await sql`
+    WITH cleanup_marker AS (
+      INSERT INTO site_settings (key, value)
+      VALUES ('legacy_custom_requests_132_removed', 'true')
+      ON CONFLICT (key) DO NOTHING
+      RETURNING key
+    ), old_requests AS (
+      SELECT id FROM custom_requests ORDER BY created_at ASC LIMIT 132
+    )
+    DELETE FROM custom_requests request
+    USING old_requests, cleanup_marker
+    WHERE request.id = old_requests.id
   `;
 
   await sql`
@@ -177,6 +213,7 @@ function rowToProduct(row: Record<string, unknown>): Product {
     slug: String(row.slug),
     category: String(row.category),
     price: Number(row.price),
+    costPrice: Number(row.cost_price ?? 0),
     compareAtPrice: row.compare_at_price == null ? null : Number(row.compare_at_price),
     stock: Number(row.stock),
     description: String(row.description),
@@ -189,6 +226,7 @@ function rowToProduct(row: Record<string, unknown>): Product {
 }
 
 export async function listProducts() {
+  if (!process.env.DATABASE_URL) return seedProducts;
   await readyDb();
   const rows = (await getSql()`SELECT * FROM products ORDER BY is_featured DESC, created_at DESC`) as DbRow[];
   return rows.map(rowToProduct);
@@ -203,9 +241,9 @@ async function writeProduct(product: Product) {
   const sql = getSql();
   await sql`
     INSERT INTO products (
-      id, name, slug, category, price, compare_at_price, stock, description, specs, images, is_customizable, is_featured
+      id, name, slug, category, price, cost_price, compare_at_price, stock, description, specs, images, is_customizable, is_featured
     ) VALUES (
-      ${product.id}, ${product.name}, ${product.slug}, ${product.category}, ${product.price},
+      ${product.id}, ${product.name}, ${product.slug}, ${product.category}, ${product.price}, ${product.costPrice ?? 0},
       ${product.compareAtPrice ?? null}, ${product.stock}, ${product.description}, ${JSON.stringify(product.specs)}::jsonb,
       ${JSON.stringify(product.images)}::jsonb, ${product.isCustomizable}, ${product.isFeatured}
     )
@@ -214,6 +252,7 @@ async function writeProduct(product: Product) {
       slug = EXCLUDED.slug,
       category = EXCLUDED.category,
       price = EXCLUDED.price,
+      cost_price = EXCLUDED.cost_price,
       compare_at_price = EXCLUDED.compare_at_price,
       stock = EXCLUDED.stock,
       description = EXCLUDED.description,
@@ -254,17 +293,23 @@ export async function listCustomRequests() {
   })) satisfies CustomRequest[];
 }
 
-export async function createOrder(order: Omit<Order, "id" | "paymentStatus" | "deliveryStatus" | "createdAt">) {
+type NewOrder = Omit<Order, "id" | "paymentStatus" | "deliveryStatus" | "createdAt"> & {
+  paymentStatus?: string;
+  deliveryStatus?: string;
+};
+
+export async function createOrder(order: NewOrder) {
   await readyDb();
   const id = crypto.randomUUID();
   await getSql()`
     INSERT INTO orders (
-      id, customer_name, mobile, address, items, amount, shiprocket_awb,
+      id, customer_name, mobile, address, items, amount, payment_status, delivery_status, shiprocket_awb,
       delivery_provider, delivery_tracking_number, delivery_notes, payment_gateway, payment_reference, phonepe_payment_id
     )
     VALUES (
       ${id}, ${order.customerName}, ${order.mobile}, ${order.address}, ${JSON.stringify(order.items)}::jsonb,
-      ${order.amount}, ${order.shiprocketAwb ?? null}, ${order.deliveryProvider ?? "review"},
+      ${order.amount}, ${order.paymentStatus ?? "pending"}, ${order.deliveryStatus ?? "pending"},
+      ${order.shiprocketAwb ?? null}, ${order.deliveryProvider ?? "review"},
       ${order.deliveryTrackingNumber ?? null}, ${order.deliveryNotes ?? null},
       ${order.paymentGateway ?? "cashfree"}, ${order.paymentReference ?? null}, ${order.phonepePaymentId ?? null}
     )
@@ -286,7 +331,7 @@ function rowToOrder(row: DbRow): Order {
     deliveryProvider: row.delivery_provider ? (String(row.delivery_provider) as Order["deliveryProvider"]) : "review",
     deliveryTrackingNumber: row.delivery_tracking_number ? String(row.delivery_tracking_number) : null,
     deliveryNotes: row.delivery_notes ? String(row.delivery_notes) : null,
-    paymentGateway: row.payment_gateway ? normalizePaymentGateway(row.payment_gateway) : "cashfree",
+    paymentGateway: row.payment_gateway === "cod" ? "cod" : row.payment_gateway ? normalizePaymentGateway(row.payment_gateway) : "cashfree",
     paymentReference: row.payment_reference ? String(row.payment_reference) : null,
     phonepePaymentId: row.phonepe_payment_id ? String(row.phonepe_payment_id) : null,
     createdAt: row.created_at ? String(row.created_at) : undefined,
@@ -315,7 +360,7 @@ export async function updateOrderDelivery(
     SET
       delivery_provider = ${delivery.deliveryProvider ?? "review"},
       delivery_tracking_number = ${delivery.deliveryTrackingNumber ?? null},
-      delivery_status = ${delivery.deliveryStatus ?? "review"},
+      delivery_status = ${delivery.deliveryStatus ?? "pending"},
       delivery_notes = ${delivery.deliveryNotes ?? null}
     WHERE id = ${id}
   `;
@@ -397,6 +442,62 @@ export async function setActivePaymentGateway(paymentGateway: PaymentGateway) {
   `;
 }
 
+export async function listProductReviews(productId: string) {
+  if (!process.env.DATABASE_URL) return [];
+  await readyDb();
+  const rows = (await getSql()`
+    SELECT id, product_id, customer_name, rating, title, comment, is_verified_purchase, created_at
+    FROM product_reviews
+    WHERE product_id = ${productId}
+    ORDER BY created_at DESC
+  `) as DbRow[];
+  return rows.map((row) => ({
+    id: String(row.id),
+    productId: String(row.product_id),
+    customerName: String(row.customer_name),
+    rating: Number(row.rating),
+    title: String(row.title),
+    comment: String(row.comment),
+    isVerifiedPurchase: Boolean(row.is_verified_purchase),
+    createdAt: row.created_at ? String(row.created_at) : undefined,
+  })) satisfies ProductReview[];
+}
+
+export async function upsertProductReview(
+  productId: string,
+  mobile: string,
+  review: Pick<ProductReview, "rating" | "title" | "comment">,
+) {
+  await readyDb();
+  const sql = getSql();
+  const productRows = (await sql`SELECT id FROM products WHERE id = ${productId} LIMIT 1`) as DbRow[];
+  if (!productRows[0]) return null;
+  const purchaseRows = (await sql`
+    SELECT customer_name
+    FROM orders
+    WHERE mobile = ${mobile}
+      AND items @> ${JSON.stringify([{ productId }])}::jsonb
+      AND (payment_status = 'paid' OR payment_gateway = 'cod')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `) as DbRow[];
+  const customerName = purchaseRows[0]?.customer_name ? String(purchaseRows[0].customer_name) : "NoteKart customer";
+  const verified = Boolean(purchaseRows[0]);
+  const id = crypto.randomUUID();
+  await sql`
+    INSERT INTO product_reviews (id, product_id, customer_name, mobile, rating, title, comment, is_verified_purchase)
+    VALUES (${id}, ${productId}, ${customerName}, ${mobile}, ${review.rating}, ${review.title}, ${review.comment}, ${verified})
+    ON CONFLICT (product_id, mobile) DO UPDATE SET
+      rating = EXCLUDED.rating,
+      title = EXCLUDED.title,
+      comment = EXCLUDED.comment,
+      customer_name = EXCLUDED.customer_name,
+      is_verified_purchase = EXCLUDED.is_verified_purchase,
+      created_at = now()
+  `;
+  return id;
+}
+
 /** Decrement stock only when enough is available. Returns true if it succeeded. */
 export async function decrementStock(productId: string, quantity: number) {
   await readyDb();
@@ -468,11 +569,33 @@ export async function deleteOtp(mobile: string) {
 export async function getAnalytics() {
   await readyDb();
   const sql = getSql();
-  const [products, custom, orders, revenue] = (await Promise.all([
+  const [products, custom, orders, revenue, sales, profit, trend] = (await Promise.all([
     sql`SELECT COUNT(*)::int AS count, COALESCE(SUM(stock), 0)::int AS stock FROM products`,
     sql`SELECT COUNT(*)::int AS count FROM custom_requests`,
     sql`SELECT COUNT(*)::int AS count FROM orders`,
-    sql`SELECT COALESCE(SUM(amount), 0)::int AS amount FROM orders`,
+    sql`SELECT COALESCE(SUM(amount), 0)::int AS amount FROM orders WHERE delivery_status <> 'cancelled'`,
+    sql`
+      SELECT
+        COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE), 0)::int AS daily,
+        COALESCE(SUM(amount) FILTER (WHERE created_at >= date_trunc('week', now())), 0)::int AS weekly,
+        COALESCE(SUM(amount) FILTER (WHERE created_at >= date_trunc('month', now())), 0)::int AS monthly
+      FROM orders WHERE delivery_status <> 'cancelled'
+    `,
+    sql`
+      SELECT COALESCE(SUM(
+        (COALESCE((item->>'price')::int, 0) - COALESCE((item->>'costPrice')::int, (item->>'price')::int, 0))
+        * COALESCE((item->>'quantity')::int, 0)
+      ), 0)::int AS amount
+      FROM orders, jsonb_array_elements(items) AS item
+      WHERE delivery_status <> 'cancelled'
+    `,
+    sql`
+      SELECT day::date::text AS day, COALESCE(SUM(orders.amount), 0)::int AS amount
+      FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, INTERVAL '1 day') AS day
+      LEFT JOIN orders ON orders.created_at >= day AND orders.created_at < day + INTERVAL '1 day'
+        AND orders.delivery_status <> 'cancelled'
+      GROUP BY day ORDER BY day
+    `,
   ])) as DbRow[][];
 
   return {
@@ -481,5 +604,12 @@ export async function getAnalytics() {
     customRequestCount: Number(custom[0]?.count ?? 0),
     orderCount: Number(orders[0]?.count ?? 0),
     revenue: Number(revenue[0]?.amount ?? 0),
+    reports: {
+      dailySales: Number(sales[0]?.daily ?? 0),
+      weeklySales: Number(sales[0]?.weekly ?? 0),
+      monthlySales: Number(sales[0]?.monthly ?? 0),
+      profit: Number(profit[0]?.amount ?? 0),
+    },
+    salesTrend: trend.map((row) => ({ day: String(row.day), amount: Number(row.amount) })),
   };
 }

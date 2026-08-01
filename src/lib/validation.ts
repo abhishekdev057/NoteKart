@@ -22,6 +22,7 @@ export const productSchema = z.object({
   slug: z.string().trim().max(160).optional(),
   category: z.string().trim().max(80).default("Notebooks"),
   price: z.number().int().nonnegative().max(1_000_000),
+  costPrice: z.number().int().nonnegative().max(1_000_000).default(0),
   compareAtPrice: z.number().int().nonnegative().max(1_000_000).nullable().optional(),
   stock: z.number().int().nonnegative().max(1_000_000).default(0),
   description: z.string().trim().max(4000).default(""),
@@ -42,6 +43,7 @@ export const customRequestSchema = z.object({
 export const orderSchema = z.object({
   customerName: z.string().trim().min(1, { error: "Name is required." }).max(120),
   address: z.string().trim().min(6, { error: "A delivery address is required." }).max(600),
+  paymentMethod: z.enum(["online", "cod"]).default("online"),
   items: z
     .array(
       z.object({
@@ -56,9 +58,15 @@ export const orderSchema = z.object({
     .max(50),
 });
 
+export const reviewSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  title: z.string().trim().min(2, { error: "Add a short review title." }).max(100),
+  comment: z.string().trim().min(10, { error: "Tell customers a little more about the notebook." }).max(1200),
+});
+
 export const deliverySchema = z.object({
   provider: z.enum(["review", "delhivery", "post_office", "manual"]).default("review"),
   trackingNumber: z.string().trim().max(120).nullable().optional(),
-  deliveryStatus: z.enum(["review", "packed", "assigned", "shipped", "delivered"]).default("review"),
+  deliveryStatus: z.enum(["pending", "printing", "processing", "shipped", "delivered", "cancelled"]).default("pending"),
   deliveryNotes: z.string().trim().max(2000).nullable().optional(),
 });

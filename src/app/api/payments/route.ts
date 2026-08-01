@@ -74,6 +74,9 @@ export async function POST(request: Request) {
     if (order.paymentStatus === "paid") {
       return NextResponse.json({ error: "This order is already paid." }, { status: 409 });
     }
+    if (order.paymentGateway === "cod") {
+      return NextResponse.json({ error: "This Cash on Delivery order is already confirmed." }, { status: 409 });
+    }
 
     const gateway = await getActivePaymentGateway();
 

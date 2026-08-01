@@ -4,6 +4,7 @@ export type Product = {
   slug: string;
   category: string;
   price: number;
+  costPrice?: number;
   compareAtPrice?: number | null;
   stock: number;
   description: string;
@@ -11,6 +12,17 @@ export type Product = {
   images: string[];
   isCustomizable: boolean;
   isFeatured: boolean;
+  createdAt?: string;
+};
+
+export type ProductReview = {
+  id: string;
+  productId: string;
+  customerName: string;
+  rating: number;
+  title: string;
+  comment: string;
+  isVerifiedPurchase: boolean;
   createdAt?: string;
 };
 
@@ -27,6 +39,7 @@ export type CustomRequest = {
 
 export type DeliveryProvider = "review" | "delhivery" | "post_office" | "manual";
 export type PaymentGateway = "cashfree" | "phonepe" | "razorpay";
+export type OrderPaymentMethod = PaymentGateway | "cod";
 
 export type Order = {
   id: string;
@@ -38,6 +51,8 @@ export type Order = {
     name: string;
     quantity: number;
     price: number;
+    costPrice?: number;
+    imageUrl?: string | null;
     customArtworkUrl?: string | null;
     customCoverName?: string | null;
     customNotes?: string | null;
@@ -49,7 +64,7 @@ export type Order = {
   deliveryProvider?: DeliveryProvider | null;
   deliveryTrackingNumber?: string | null;
   deliveryNotes?: string | null;
-  paymentGateway?: PaymentGateway | null;
+  paymentGateway?: OrderPaymentMethod | null;
   paymentReference?: string | null;
   phonepePaymentId?: string | null;
   createdAt?: string;

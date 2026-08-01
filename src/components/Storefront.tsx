@@ -3,11 +3,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import dynamic from "next/dynamic";
-
-const ThreeDNotebookStack = dynamic(
-  () => import("./ThreeDNotebookStack"),
-  { ssr: false }
-);
+import Image from "next/image";
 
 const ThreeDNotebookCustomizer = dynamic(
   () => import("./ThreeDNotebookCustomizer"),
@@ -16,6 +12,8 @@ const ThreeDNotebookCustomizer = dynamic(
 import {
   AlertCircle,
   ArrowRight,
+  BadgeCheck,
+  Banknote,
   Boxes,
   Check,
   CheckCircle2,
@@ -32,13 +30,14 @@ import {
   Search,
   ShoppingBag,
   Smartphone,
+  Star,
   Truck,
   Upload,
   UserRound,
   X,
   XCircle,
 } from "lucide-react";
-import type { Order, Product } from "@/lib/types";
+import type { Order, Product, ProductReview } from "@/lib/types";
 
 type CartItem = Product & {
   quantity: number;
@@ -223,6 +222,7 @@ function isCustomCartItem(item: CartItem) {
 
 function orderPaymentLabel(status: string) {
   const value = status.toLowerCase();
+  if (value === "cod_pending") return "Cash on Delivery";
   if (value === "paid") return "Payment successful";
   if (["failed", "cancelled", "amount_mismatch"].includes(value)) return "Payment issue";
   return "Payment pending";
@@ -230,7 +230,7 @@ function orderPaymentLabel(status: string) {
 
 function orderTone(status: string) {
   const value = status.toLowerCase();
-  if (value === "paid" || value === "delivered") return "success";
+  if (value === "paid" || value === "delivered" || value === "cod_pending") return "success";
   if (["failed", "cancelled", "amount_mismatch"].includes(value)) return "danger";
   return "pending";
 }
@@ -238,9 +238,9 @@ function orderTone(status: string) {
 function deliveryLabel(order: CustomerOrder) {
   if (order.deliveryStatus === "delivered") return "Delivered";
   if (order.deliveryStatus === "shipped") return "Shipped";
-  if (order.deliveryStatus === "assigned") return "Delivery assigned";
-  if (order.deliveryStatus === "packed") return "Packed";
-  return "Under review";
+  if (["printing", "processing", "packed", "assigned"].includes(order.deliveryStatus)) return "Printing / Processing";
+  if (order.deliveryStatus === "cancelled") return "Cancelled";
+  return "Pending";
 }
 
 function providerLabel(provider?: string | null) {
@@ -262,8 +262,10 @@ function formatOrderDate(value?: string) {
 }
 
 function buildOrderTimeline(order: CustomerOrder) {
+  const isCod = order.paymentGateway === "cod";
   const paymentTone = orderTone(order.paymentStatus);
-  const deliveryTone = order.deliveryStatus === "delivered" ? "success" : order.paymentStatus === "paid" ? "pending" : "muted";
+  const paymentConfirmed = order.paymentStatus === "paid" || isCod;
+  const deliveryTone = order.deliveryStatus === "delivered" ? "success" : paymentConfirmed ? "pending" : "muted";
   return [
     {
       title: "Order placed",
@@ -274,16 +276,18 @@ function buildOrderTimeline(order: CustomerOrder) {
     {
       title: orderPaymentLabel(order.paymentStatus),
       body:
-        order.paymentStatus === "paid"
+        isCod
+          ? "Pay in cash when your NoteKart order arrives."
+          : order.paymentStatus === "paid"
           ? `${order.paymentGateway ?? "payment"} reference ${order.paymentReference ?? order.phonepePaymentId ?? "saved"}`
           : "We will show success, failed, or cancelled here after gateway confirmation.",
       tone: paymentTone,
       icon: paymentTone === "danger" ? XCircle : paymentTone === "success" ? CheckCircle2 : Clock3,
     },
     {
-      title: order.paymentStatus === "paid" ? "Production review" : "Waiting for confirmed payment",
-      body: order.paymentStatus === "paid" ? "Notebook details are ready for packing or production review." : "Production starts after payment is confirmed.",
-      tone: order.paymentStatus === "paid" ? "pending" : "muted",
+      title: paymentConfirmed ? "Printing / Processing" : "Waiting for confirmed payment",
+      body: paymentConfirmed ? "Notebook details are ready for printing, quality checks and packing." : "Production starts after payment is confirmed.",
+      tone: paymentConfirmed ? "pending" : "muted",
       icon: AlertCircle,
     },
     {
@@ -349,6 +353,11 @@ export function Storefront({ products }: { products: Product[] }) {
   const [customSubmitted, setCustomSubmitted] = useState(false);
   const [customizingProductId, setCustomizingProductId] = useState("custom-photo-journal");
   const [checkoutMessage, setCheckoutMessage] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"online" | "cod">("cod");
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewStatus, setReviewStatus] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersMessage, setOrdersMessage] = useState("");
@@ -357,10 +366,6 @@ export function Storefront({ products }: { products: Product[] }) {
   const { scrollYProgress } = useScroll();
   const heroLift = useTransform(scrollYProgress, [0, 0.35], [0, -90]);
   const heroTilt = useTransform(scrollYProgress, [0, 0.35], [0, -7]);
-  const stackDrift = useTransform(scrollYProgress, [0, 0.35], [0, 56]);
-  const accentDrift = useTransform(scrollYProgress, [0, 0.35], [0, -140]);
-  const paperDrift = useTransform(scrollYProgress, [0, 0.35], [0, 120]);
-  const paperDriftSlow = useTransform(scrollYProgress, [0, 0.35], [0, 52]);
 
   useEffect(() => {
     // The session is an httpOnly cookie verified server-side; ask the server
@@ -438,6 +443,25 @@ export function Storefront({ products }: { products: Product[] }) {
     };
   }, [checkoutAddress.pincode]);
 
+  useEffect(() => {
+    if (!selected?.id) return;
+    let active = true;
+    fetch(`/api/products/${selected.id}/reviews`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        if (active) setReviews(data.reviews ?? []);
+      })
+      .catch(() => {
+        if (active) setReviews([]);
+      })
+      .finally(() => {
+        if (active) setReviewsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected?.id]);
+
   const categories = useMemo(
     () => ["All", ...Array.from(new Set(products.map((product) => product.category)))],
     [products],
@@ -448,6 +472,16 @@ export function Storefront({ products }: { products: Product[] }) {
 
   function getCartQuantity(productId: string) {
     return cart.find((item) => item.id === productId)?.quantity ?? 0;
+  }
+
+  function showProduct(product: Product) {
+    if (product.id !== selected.id) {
+      setSelected(product);
+      setImageIndex(0);
+      setReviews([]);
+      setReviewsLoading(true);
+      setReviewStatus("");
+    }
   }
 
   function addToCart(product: Product, openCart = false) {
@@ -790,6 +824,7 @@ export function Storefront({ products }: { products: Product[] }) {
       body: JSON.stringify({
         customerName: checkoutAddress.customerName.trim(),
         address: formattedAddress(),
+        paymentMethod,
         items: cart.map((item) => ({
           productId: item.productId ?? item.id,
           quantity: item.quantity,
@@ -802,6 +837,13 @@ export function Storefront({ products }: { products: Product[] }) {
     const order = await orderResponse.json();
     if (!orderResponse.ok) {
       setCheckoutMessage(order.error ?? "Could not create your order.");
+      return;
+    }
+
+    if (paymentMethod === "cod") {
+      persistCart([]);
+      setCheckoutMessage(`Order #${String(order.id).slice(0, 8)} confirmed with Cash on Delivery. Estimated delivery: 4–7 days.`);
+      void loadCustomerOrders();
       return;
     }
 
@@ -841,6 +883,32 @@ export function Storefront({ products }: { products: Product[] }) {
     );
   }
 
+  async function submitReview(formData: FormData) {
+    if (!user) {
+      setReviewStatus("Login with your mobile number to write a review.");
+      setAuthOpen(true);
+      return;
+    }
+    setReviewStatus("Saving your review...");
+    const response = await fetch(`/api/products/${selected.id}/reviews`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        rating: reviewRating,
+        title: formData.get("title"),
+        comment: formData.get("comment"),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setReviewStatus(data.error ?? "Could not save your review.");
+      return;
+    }
+    const refreshed = await fetch(`/api/products/${selected.id}/reviews`, { cache: "no-store" }).then((result) => result.json());
+    setReviews(refreshed.reviews ?? []);
+    setReviewStatus("Thank you—your review is now live.");
+  }
+
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <header className="fixed inset-x-0 top-0 z-40 border-b border-black/10 bg-[rgba(250,247,238,0.82)] backdrop-blur-xl">
@@ -854,7 +922,8 @@ export function Storefront({ products }: { products: Product[] }) {
           <nav className="hidden items-center gap-8 text-sm font-medium text-black/70 md:flex">
             <a href="#products">Products</a>
             <a href="#custom">Customize</a>
-            <a href="#craft">Craft</a>
+            <a href="#reviews">Reviews</a>
+            <a href="#about">About us</a>
           </nav>
           <div className="flex items-center gap-2">
             <button className="icon-button hidden md:grid" aria-label="Search">
@@ -914,9 +983,14 @@ export function Storefront({ products }: { products: Product[] }) {
           </div>
 
           <motion.div style={{ y: heroLift, rotateX: heroTilt }} className="hero-stage">
-            <div className="absolute inset-0 z-10 flex items-center justify-center">
-              <ThreeDNotebookStack />
-            </div>
+            <Image
+              className="hero-product-visual"
+              src="/notekart-hero-notebooks.webp"
+              alt="Colorful science, cricket and nature notebooks with realistic printed textures"
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 52vw"
+            />
             <div className="floating-card top-8 right-0">
               <Smartphone size={18} />
               Secure checkout
@@ -951,11 +1025,10 @@ export function Storefront({ products }: { products: Product[] }) {
                 className="product-card"
                 key={product.id}
                 onMouseEnter={() => {
-                  setSelected(product);
-                  setImageIndex(0);
+                  showProduct(product);
                 }}
               >
-                <button className="product-media" onClick={() => setSelected(product)} aria-label={`View ${product.name}`}>
+                <button className="product-media" onClick={() => showProduct(product)} aria-label={`View ${product.name}`}>
                   <img src={product.images[0]} alt={product.name} />
                 </button>
                 <div className="flex items-start justify-between gap-3">
@@ -996,6 +1069,13 @@ export function Storefront({ products }: { products: Product[] }) {
               <p className="text-sm font-semibold text-[var(--saffron)]">{selected.category}</p>
               <h3>{selected.name}</h3>
               <p>{selected.description}</p>
+              <div className="delivery-estimate">
+                <Truck size={19} />
+                <div>
+                  <strong>Estimated delivery: 4–7 days</strong>
+                  <span>Delivery time may vary slightly by pincode.</span>
+                </div>
+              </div>
               <div className="spec-grid">
                 {Object.entries(selected.specs).map(([key, value]) => (
                   <div key={key}>
@@ -1023,6 +1103,68 @@ export function Storefront({ products }: { products: Product[] }) {
               )}
             </div>
           </div>
+
+          <section className="reviews-shell" id="reviews">
+            <div className="reviews-summary">
+              <p>Customer reviews & ratings</p>
+              <div className="rating-score">
+                <strong>
+                  {reviews.length
+                    ? (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1)
+                    : "New"}
+                </strong>
+                <div>
+                  <div className="stars" aria-label={`${reviews.length ? "Average customer rating" : "No ratings yet"}`}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star key={star} size={18} fill={reviews.length && star <= Math.round(reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) ? "currentColor" : "none"} />
+                    ))}
+                  </div>
+                  <span>{reviews.length} rating{reviews.length === 1 ? "" : "s"} for {selected.name}</span>
+                </div>
+              </div>
+              <p className="review-note">Real feedback helps students choose the right notebook.</p>
+            </div>
+            <div className="reviews-content">
+              <div className="review-list">
+                {reviewsLoading ? <p>Loading customer reviews...</p> : reviews.length ? reviews.map((review) => (
+                  <article className="review-card" key={review.id}>
+                    <div className="review-card-head">
+                      <div>
+                        <strong>{review.customerName}</strong>
+                        {review.isVerifiedPurchase ? <span className="verified-review"><BadgeCheck size={14} /> Verified purchase</span> : null}
+                      </div>
+                      <div className="stars small">
+                        {[1, 2, 3, 4, 5].map((star) => <Star key={star} size={14} fill={star <= review.rating ? "currentColor" : "none"} />)}
+                      </div>
+                    </div>
+                    <h4>{review.title}</h4>
+                    <p>{review.comment}</p>
+                  </article>
+                )) : (
+                  <div className="empty-reviews">
+                    <Star size={25} />
+                    <strong>Be the first to review this notebook</strong>
+                    <span>Share print, paper and cover quality details with other students.</span>
+                  </div>
+                )}
+              </div>
+              <form action={submitReview} className="review-form">
+                <strong>Write a review</strong>
+                <span>Your review is linked to your verified mobile login.</span>
+                <div className="review-rating-picker" aria-label="Choose rating">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button type="button" key={star} onClick={() => setReviewRating(star)} aria-label={`${star} star rating`}>
+                      <Star size={23} fill={star <= reviewRating ? "currentColor" : "none"} />
+                    </button>
+                  ))}
+                </div>
+                <input name="title" placeholder="Review title" minLength={2} maxLength={100} required />
+                <textarea name="comment" placeholder="How was the cover print, paper and binding?" minLength={10} maxLength={1200} rows={4} required />
+                <button className="primary-button justify-center" type="submit">Submit review <ArrowRight size={17} /></button>
+                {reviewStatus ? <span className="form-status">{reviewStatus}</span> : null}
+              </form>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -1142,19 +1284,51 @@ export function Storefront({ products }: { products: Product[] }) {
         </div>
       </section>
 
-      <section id="craft" className="px-4 py-16 md:px-8 md:py-24">
-        <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-3">
-          {[
-            ["Design proof", "Custom covers are checked for crop, brightness and print fit before production."],
-            ["Manufacturing", "Notebook sizes, ruling, page count and binding are managed privately by NoteKart."],
-            ["Delivery", "Orders can be tracked after dispatch when courier details are available."],
-          ].map(([title, body]) => (
-            <div className="process-panel" key={title}>
-              <span />
-              <h3>{title}</h3>
-              <p>{body}</p>
+      <section id="about" className="about-section px-4 py-16 md:px-8 md:py-24">
+        <div className="mx-auto max-w-5xl">
+          <div className="about-kicker">The Story of NoteKart</div>
+          <h2>From a Small Village to Students Across India</h2>
+          <div className="about-story">
+            <article>
+              <h3>A Dream Started Here</h3>
+              <p>NoteKart is not just a notebook brand. It is the story of a dream, hard work, and believing that even a small idea can create something big.</p>
+              <p>My name is Anuj, and I am a 17-year-old student from Domra, Nawalgarh, Jhunjhunu, Rajasthan. Like every student, I used to buy notebooks every year. But every notebook looked the same. I wanted something different—something that could show my own style and personality.</p>
+              <blockquote>“Why should notebooks be boring when they can be personal?”</blockquote>
+              <p>That one simple question became the beginning of NoteKart.</p>
+            </article>
+            <article>
+              <h3>The First Step</h3>
+              <p>I didn&apos;t start with a big office. I didn&apos;t have a big investment. I didn&apos;t have a team. I started from my home with one goal—to make notebooks that students would feel proud to carry.</p>
+              <p>Every order, every design, and every customer gave me the confidence to keep moving forward.</p>
+            </article>
+            <article>
+              <h3>Made for Every Student</h3>
+              <p>At NoteKart, we believe every notebook should feel special. Whether you love Anime, Cars, Bikes, Cricket, Motivation, Nature, Photography, or your own memories, we turn your ideas into a notebook that is truly yours.</p>
+              <p>Every cover is printed with care because we know it is more than just a notebook—it is something you carry every day.</p>
+            </article>
+            <article>
+              <h3>Quality Comes First</h3>
+              <p>We never believe in shortcuts. Every notebook is carefully checked before shipping—from printing quality to paper quality—because your trust is more valuable than any order.</p>
+            </article>
+            <article>
+              <h3>Growing Every Day</h3>
+              <p>NoteKart is still a small startup, but every single customer helps us grow. Every order tells us that our dream is reaching another student somewhere in India.</p>
+              <p>Your support is not just helping a business. It is helping a young student build his dream.</p>
+            </article>
+            <article>
+              <h3>Our Mission</h3>
+              <p>Our mission is simple: to make high-quality, affordable, and fully customized notebooks available to every student in India.</p>
+              <p>We want students to feel excited every time they open their notebooks, because learning becomes even more enjoyable when something is truly your own.</p>
+            </article>
+          </div>
+          <div className="about-thanks">
+            <BadgeCheck size={27} />
+            <div>
+              <h3>Thank You</h3>
+              <p>If you have ever placed an order, shared our page, or recommended NoteKart—thank you. You are not just our customer. You are a part of our journey.</p>
+              <p>Together, let&apos;s build something that started from a small village and reaches students across India. Welcome to the NoteKart Family. ❤️</p>
             </div>
-          ))}
+          </div>
         </div>
       </section>
 
@@ -1170,6 +1344,7 @@ export function Storefront({ products }: { products: Product[] }) {
             <a href="/privacy-policy">Privacy</a>
             <a href="/return-policy">Returns</a>
             <a href="/shipping-policy">Shipping</a>
+            <a href="#about">About us</a>
           </div>
         </div>
       </footer>
@@ -1296,12 +1471,25 @@ export function Storefront({ products }: { products: Product[] }) {
                     {serviceability.status === "unserviceable" ? (
                       <p className="delivery-retry-text">Try another pincode or delivery location to continue checkout.</p>
                     ) : null}
+                    <div className="checkout-delivery-note">
+                      <Truck size={18} /> <span><strong>Estimated delivery:</strong> 4–7 days</span>
+                    </div>
+                    <div className="payment-methods">
+                      <button className={paymentMethod === "cod" ? "active" : ""} type="button" onClick={() => setPaymentMethod("cod")}>
+                        <Banknote size={20} />
+                        <span><strong>Cash on Delivery</strong><small>Pay when the order arrives</small></span>
+                      </button>
+                      <button className={paymentMethod === "online" ? "active" : ""} type="button" onClick={() => setPaymentMethod("online")}>
+                        <LockKeyhole size={20} />
+                        <span><strong>Pay online</strong><small>Secure UPI / card checkout</small></span>
+                      </button>
+                    </div>
                     <button
                       className="primary-button justify-center place-order-button"
                       onClick={checkout}
                       disabled={!cart.length || ["checking", "unserviceable"].includes(serviceability.status)}
                     >
-                      Place my order <ArrowRight size={18} />
+                      {paymentMethod === "cod" ? "Place COD order" : "Proceed to secure payment"} <ArrowRight size={18} />
                     </button>
                   </form>
                 ) : (
@@ -1423,11 +1611,16 @@ export function Storefront({ products }: { products: Product[] }) {
                     </div>
                     <div className="customer-order-items">
                       {order.items.map((item) => (
-                        <span key={`${order.id}-${item.productId}`}>
-                          {item.quantity} x {item.name}
-                          {item.customCoverName ? ` · Cover name: ${item.customCoverName}` : ""}
-                          {item.customArtworkUrl ? " · Custom photo" : ""}
-                        </span>
+                        <div className="customer-order-product" key={`${order.id}-${item.productId}-${item.customArtworkUrl ?? "catalog"}`}>
+                          {item.imageUrl || item.customArtworkUrl || products.find((product) => product.id === item.productId)?.images[0] ? (
+                            <img src={item.customArtworkUrl ?? item.imageUrl ?? products.find((product) => product.id === item.productId)?.images[0] ?? ""} alt={item.name} />
+                          ) : <span className="order-product-placeholder"><NotebookPen size={18} /></span>}
+                          <span>
+                            <strong>{item.quantity} × {item.name}</strong>
+                            {item.customCoverName ? <small>Cover name: {item.customCoverName}</small> : null}
+                            {item.customArtworkUrl ? <small>Custom cover artwork attached</small> : null}
+                          </span>
+                        </div>
                       ))}
                     </div>
                     <div className="customer-order-meta">
@@ -1488,11 +1681,10 @@ export function Storefront({ products }: { products: Product[] }) {
               <h2>Menu</h2>
               <button className="icon-button" onClick={() => setMobileNavOpen(false)}><X size={18} /></button>
             </div>
-            {["Products", "Customize", "Craft"].map((label) => (
-              <a className="mobile-link" href={`#${label.toLowerCase()}`} key={label}>
-                {label}
-              </a>
-            ))}
+            <a className="mobile-link" href="#products">Products</a>
+            <a className="mobile-link" href="#custom">Customize</a>
+            <a className="mobile-link" href="#reviews">Reviews</a>
+            <a className="mobile-link" href="#about">About us</a>
             <button className="mobile-link text-left" onClick={openOrders}>
               My orders
             </button>

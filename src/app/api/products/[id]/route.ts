@@ -21,6 +21,7 @@ export async function PUT(request: Request, context: Context) {
       slug: input.slug || slugify(input.name),
       category: input.category,
       price: input.price,
+      costPrice: input.costPrice,
       compareAtPrice: input.compareAtPrice ?? null,
       stock: input.stock,
       description: input.description,

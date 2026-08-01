@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       slug: input.slug || slugify(name),
       category: input.category,
       price: input.price,
+      costPrice: input.costPrice,
       compareAtPrice: input.compareAtPrice ?? null,
       stock: input.stock,
       description: input.description,
