@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { DelhiveryTrackingCard } from "@/components/DelhiveryTrackingCard";
 import type { CustomRequest, DeliveryProvider, Order, PaymentGateway, Product } from "@/lib/types";
 
 type AdminSection = "dashboard" | "products" | "custom-requests" | "orders" | "delivery" | "reports";
@@ -178,8 +179,6 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [form, setForm] = useState<ProductForm>(emptyProduct);
   const [editingProductId, setEditingProductId] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
-  const [trackingAwb, setTrackingAwb] = useState("");
-  const [tracking, setTracking] = useState("");
   const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>("cashfree");
   const [paymentGatewayMessage, setPaymentGatewayMessage] = useState("");
 
@@ -501,17 +500,6 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     setUploadMessage("");
   }
 
-  async function trackShipment() {
-    setTracking("Checking Delhivery...");
-    const response = await fetch("/api/delhivery/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ waybill: trackingAwb }),
-    });
-    const data = await response.json();
-    setTracking(JSON.stringify(data.tracking ?? data, null, 2));
-  }
-
   if (checkingSession) {
     return <main className="admin-login" />;
   }
@@ -646,10 +634,6 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
           <DeliveryPanel
             orders={orders}
             products={products}
-            trackingAwb={trackingAwb}
-            tracking={tracking}
-            onTrackingAwbChange={setTrackingAwb}
-            onTrackShipment={trackShipment}
             onDeliverySaved={loadAdminData}
           />
         ) : null}
@@ -1090,18 +1074,10 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
 function DeliveryPanel({
   orders,
   products,
-  trackingAwb,
-  tracking,
-  onTrackingAwbChange,
-  onTrackShipment,
   onDeliverySaved,
 }: {
   orders: Order[];
   products: Product[];
-  trackingAwb: string;
-  tracking: string;
-  onTrackingAwbChange: (value: string) => void;
-  onTrackShipment: () => Promise<void>;
   onDeliverySaved: () => Promise<void>;
 }) {
   return (
@@ -1130,22 +1106,19 @@ function DeliveryPanel({
                   ))}
                 </div>
               </div>
-              <DeliveryAssignmentForm order={order} onSaved={onDeliverySaved} />
+              <div className="delivery-card-actions">
+                <DeliveryAssignmentForm order={order} onSaved={onDeliverySaved} />
+                {order.deliveryProvider === "delhivery" && order.deliveryTrackingNumber ? (
+                  <DelhiveryTrackingCard
+                    admin
+                    orderId={order.id}
+                    waybill={order.deliveryTrackingNumber}
+                  />
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="admin-panel">
-        <div className="panel-title">
-          <ShipWheel size={20} />
-          <h2>Delhivery tracking</h2>
-        </div>
-        <div className="track-box">
-          <input value={trackingAwb} onChange={(event) => onTrackingAwbChange(event.target.value)} placeholder="Enter Delhivery waybill / AWB code" />
-          <button className="primary-button justify-center" onClick={onTrackShipment}>Track shipment</button>
-        </div>
-        {tracking ? <pre className="tracking-output">{tracking}</pre> : null}
       </section>
     </section>
   );

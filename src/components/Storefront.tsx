@@ -38,6 +38,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { Order, Product, ProductReview } from "@/lib/types";
+import { DelhiveryTrackingCard } from "@/components/DelhiveryTrackingCard";
 
 type CartItem = Product & {
   quantity: number;
@@ -59,12 +60,6 @@ type ServiceabilityState = {
   status: "idle" | "checking" | "serviceable" | "unserviceable" | "error";
   message: string;
 };
-type TrackingState = {
-  loading?: boolean;
-  message?: string;
-  scans?: string[];
-};
-
 declare global {
   interface Window {
     initSendOTP?: (configuration: Record<string, unknown>) => void;
@@ -299,31 +294,6 @@ function buildOrderTimeline(order: CustomerOrder) {
   ];
 }
 
-function extractTrackingScans(payload: unknown): string[] {
-  const scans: string[] = [];
-  const visit = (value: unknown) => {
-    if (!value || scans.length > 8) return;
-    if (typeof value === "string") return;
-    if (Array.isArray(value)) {
-      value.forEach(visit);
-      return;
-    }
-    if (typeof value !== "object") return;
-    const record = value as Record<string, unknown>;
-    const text =
-      record.scan_detail ??
-      record.status ??
-      record.current_status ??
-      record.Instructions ??
-      record.Scan ??
-      record.scan;
-    if (typeof text === "string" && text.trim()) scans.push(text.trim());
-    Object.values(record).forEach(visit);
-  };
-  visit(payload);
-  return Array.from(new Set(scans)).slice(0, 6);
-}
-
 export function Storefront({ products }: { products: Product[] }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -361,7 +331,6 @@ export function Storefront({ products }: { products: Product[] }) {
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersMessage, setOrdersMessage] = useState("");
-  const [trackingByOrder, setTrackingByOrder] = useState<Record<string, TrackingState>>({});
   const [serviceability, setServiceability] = useState<ServiceabilityState>({ status: "idle", message: "" });
   const { scrollYProgress } = useScroll();
   const heroLift = useTransform(scrollYProgress, [0, 0.35], [0, -90]);
@@ -700,28 +669,6 @@ export function Storefront({ products }: { products: Product[] }) {
     } catch {
       setServiceability({ status: "error", message: "Could not check delivery availability. Please retry." });
       return false;
-    }
-  }
-
-  async function loadOrderTracking(orderId: string) {
-    setTrackingByOrder((current) => ({ ...current, [orderId]: { loading: true, message: "Checking latest Delhivery tracking..." } }));
-    try {
-      const response = await fetch(`/api/orders/${orderId}/tracking`, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) {
-        setTrackingByOrder((current) => ({ ...current, [orderId]: { message: data.error ?? "Could not load tracking." } }));
-        return;
-      }
-      const scans = extractTrackingScans(data.tracking);
-      setTrackingByOrder((current) => ({
-        ...current,
-        [orderId]: {
-          message: scans.length ? "Latest Delhivery updates" : "Tracking is assigned. Detailed scans will appear after courier movement.",
-          scans,
-        },
-      }));
-    } catch {
-      setTrackingByOrder((current) => ({ ...current, [orderId]: { message: "Could not connect to tracking service." } }));
     }
   }
 
@@ -1632,22 +1579,10 @@ export function Storefront({ products }: { products: Product[] }) {
                       {order.deliveryTrackingNumber ? <span>Tracking: {order.deliveryTrackingNumber}</span> : null}
                     </div>
                     {order.deliveryProvider === "delhivery" && order.deliveryTrackingNumber ? (
-                      <div className="delivery-tracking-box">
-                        <button
-                          className="secondary-button justify-center"
-                          type="button"
-                          onClick={() => loadOrderTracking(order.id)}
-                          disabled={trackingByOrder[order.id]?.loading}
-                        >
-                          {trackingByOrder[order.id]?.loading ? "Checking..." : "Track delivery"} <Truck size={17} />
-                        </button>
-                        {trackingByOrder[order.id]?.message ? <span>{trackingByOrder[order.id]?.message}</span> : null}
-                        {trackingByOrder[order.id]?.scans?.length ? (
-                          <ol>
-                            {trackingByOrder[order.id]?.scans?.map((scan) => <li key={scan}>{scan}</li>)}
-                          </ol>
-                        ) : null}
-                      </div>
+                      <DelhiveryTrackingCard
+                        orderId={order.id}
+                        waybill={order.deliveryTrackingNumber}
+                      />
                     ) : null}
                     <div className="order-timeline">
                       {buildOrderTimeline(order).map(({ title, body, tone, icon: Icon }) => (

@@ -41,6 +41,25 @@ export type DeliveryProvider = "review" | "delhivery" | "post_office" | "manual"
 export type PaymentGateway = "cashfree" | "phonepe" | "razorpay";
 export type OrderPaymentMethod = PaymentGateway | "cod";
 
+export type DeliveryTrackingScan = {
+  status: string;
+  instructions?: string;
+  location?: string;
+  dateTime?: string;
+};
+
+export type DeliveryTrackingSummary = {
+  waybill: string;
+  currentStatus: string;
+  instructions?: string;
+  location?: string;
+  lastUpdated?: string;
+  expectedDeliveryDate?: string;
+  origin?: string;
+  destination?: string;
+  scans: DeliveryTrackingScan[];
+};
+
 export type Order = {
   id: string;
   customerName: string;

@@ -604,7 +604,6 @@ img {
 .delivery-form input,
 .delivery-form textarea,
 .delivery-form select,
-.track-box input,
 .admin-login-card input {
   width: 100%;
   border-radius: 8px;
@@ -626,7 +625,6 @@ img {
 .delivery-form input:focus,
 .delivery-form textarea:focus,
 .delivery-form select:focus,
-.track-box input:focus,
 .admin-login-card input:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(12, 143, 132, 0.12);
@@ -995,30 +993,189 @@ img {
 
 .delivery-tracking-box {
   display: grid;
-  gap: 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(12, 143, 132, 0.14);
-  background: rgba(12, 143, 132, 0.07);
-  padding: 10px;
+  gap: 12px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(12, 143, 132, 0.2);
+  background: linear-gradient(145deg, rgba(12, 143, 132, 0.1), rgba(255, 253, 247, 0.86));
+  padding: 14px;
 }
 
-.delivery-tracking-box span {
-  color: var(--teal);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.delivery-tracking-box ol {
+.delivery-tracking-head {
   display: grid;
-  gap: 6px;
-  padding-left: 18px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
 }
 
-.delivery-tracking-box li {
+.delivery-tracking-head > div {
+  min-width: 0;
+}
+
+.delivery-tracking-head strong,
+.delivery-tracking-head span {
+  display: block;
+}
+
+.delivery-tracking-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.delivery-tracking-head span:not(.delivery-tracking-icon) {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.delivery-tracking-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--teal);
+  color: white;
+}
+
+.delivery-tracking-head button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid rgba(12, 143, 132, 0.22);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--teal);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.delivery-tracking-head button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.delivery-tracking-current {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 12px;
+}
+
+.delivery-tracking-current > span {
+  display: block;
+  color: var(--teal);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.delivery-tracking-current > strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.delivery-tracking-current p,
+.delivery-scan-list p,
+.delivery-tracking-message {
+  margin: 4px 0 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.45;
+}
+
+.delivery-tracking-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 9px;
+}
+
+.delivery-tracking-facts span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.delivery-scan-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.delivery-scan-list li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 8px;
+  padding: 0 0 12px;
+}
+
+.delivery-scan-list li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  background: rgba(12, 143, 132, 0.18);
+}
+
+.delivery-scan-list li:last-child {
+  padding-bottom: 0;
+}
+
+.delivery-scan-dot {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border: 3px solid rgba(12, 143, 132, 0.24);
+  border-radius: 50%;
+  background: var(--teal);
+}
+
+.delivery-scan-list strong,
+.delivery-scan-list small {
+  display: block;
+}
+
+.delivery-scan-list strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.delivery-scan-list small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.delivery-tracking-message {
+  margin: 0;
+}
+
+.tracking-spin {
+  animation: tracking-spin 0.9s linear infinite;
+}
+
+@keyframes tracking-spin {
+  to { transform: rotate(360deg); }
 }
 
 .order-timeline {
@@ -1741,6 +1898,11 @@ img {
   gap: 10px;
 }
 
+.delivery-card-actions {
+  display: grid;
+  gap: 12px;
+}
+
 .admin-pill {
   max-width: 150px;
   overflow: hidden;
@@ -1749,23 +1911,6 @@ img {
   padding: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.track-box {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr;
-}
-
-.tracking-output {
-  margin-top: 14px;
-  max-height: 260px;
-  overflow: auto;
-  border-radius: 8px;
-  background: #17130f;
-  color: #faf7ee;
-  padding: 14px;
-  font-size: 12px;
 }
 
 .hero-product-visual {
@@ -2362,9 +2507,6 @@ img {
     grid-column: 1 / -1;
   }
 
-  .track-box {
-    grid-template-columns: 1fr auto;
-  }
 }
 
 @media (max-width: 640px) {

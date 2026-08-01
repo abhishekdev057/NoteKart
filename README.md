@@ -56,6 +56,17 @@ HMAC-signed, httpOnly cookies. Every admin/data API verifies the session
 server-side (`requireUser` / `requireAdmin`) — the client UI is never trusted
 for authorization.
 
+## Delhivery production tracking
+
+Add these server-side variables to every production environment in Vercel:
+
+- `DELHIVERY_API_TOKEN` — the live token from Delhivery One → Settings → API Setup
+- `DELHIVERY_ENV=production`
+- `DELHIVERY_PICKUP_LOCATION` — the exact, case-sensitive registered warehouse name (needed when creating shipments)
+
+Do not prefix the token with `NEXT_PUBLIC_`. Order cards call NoteKart's protected
+server routes, so the Delhivery credential is never sent to the browser.
+
 ## Checks
 
 ```bash

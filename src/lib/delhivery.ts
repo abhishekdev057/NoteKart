@@ -1,4 +1,4 @@
-import type { Order } from "./types";
+import type { DeliveryTrackingScan, DeliveryTrackingSummary, Order } from "./types";
 
 export type DelhiveryServiceability = {
   pincode: string;
@@ -128,6 +128,79 @@ function extractWaybill(payload: Record<string, unknown>) {
   );
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function firstText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
+  }
+  return undefined;
+}
+
+/** Convert Delhivery's nested response into a stable shape for both UIs. */
+export function summarizeDelhiveryTracking(payload: unknown, fallbackWaybill = ""): DeliveryTrackingSummary | null {
+  const root = asRecord(payload);
+  if (!root) return null;
+
+  const shipmentData = Array.isArray(root.ShipmentData) ? root.ShipmentData : [];
+  const firstShipmentData = asRecord(shipmentData[0]);
+  const shipment = asRecord(firstShipmentData?.Shipment) ?? asRecord(root.Shipment) ?? root;
+  const status = asRecord(shipment.Status) ?? asRecord(root.Status);
+  const rawScans = Array.isArray(shipment.Scans)
+    ? shipment.Scans
+    : Array.isArray(root.scans)
+      ? root.scans
+      : [];
+
+  const scans = rawScans
+    .map((entry): DeliveryTrackingScan | null => {
+      if (typeof entry === "string") return { status: entry };
+      const record = asRecord(entry);
+      const detail = asRecord(record?.ScanDetail) ?? record;
+      if (!detail) return null;
+      const scanStatus = firstText(detail.Scan, detail.Status, detail.scan, detail.status, detail.Instructions);
+      if (!scanStatus) return null;
+      return {
+        status: scanStatus,
+        instructions: firstText(detail.Instructions, detail.instructions),
+        location: firstText(detail.ScannedLocation, detail.StatusLocation, detail.location),
+        dateTime: firstText(detail.ScanDateTime, detail.StatusDateTime, detail.date_time, detail.datetime),
+      };
+    })
+    .filter((scan): scan is DeliveryTrackingScan => Boolean(scan));
+
+  const currentStatus = firstText(
+    status?.Status,
+    status?.status,
+    shipment.current_status,
+    root.current_status,
+    scans[0]?.status,
+  );
+  if (!currentStatus && !scans.length) return null;
+
+  return {
+    waybill: firstText(shipment.AWB, shipment.Waybill, root.waybill, root.AWB, fallbackWaybill) ?? fallbackWaybill,
+    currentStatus: currentStatus ?? "Tracking available",
+    instructions: firstText(status?.Instructions, status?.instructions, shipment.instructions),
+    location: firstText(status?.StatusLocation, status?.location, shipment.CurrentLocation),
+    lastUpdated: firstText(status?.StatusDateTime, status?.date_time, shipment.StatusDateTime),
+    expectedDeliveryDate: firstText(
+      shipment.ExpectedDeliveryDate,
+      shipment.ExpectedDeliveryDateTime,
+      shipment.EDD,
+      root.expected_delivery_date,
+    ),
+    origin: firstText(shipment.Origin, shipment.origin),
+    destination: firstText(shipment.Destination, shipment.destination),
+    scans: scans.slice(0, 8),
+  };
+}
+
 export async function createDelhiveryShipment(order: Order) {
   const token = getDelhiveryToken();
   const { address, city, state, pincode } = parseOrderAddress(order.address);
@@ -207,14 +280,16 @@ export async function trackDelhiveryShipment(waybill: string) {
   if (!clean) return { error: "Waybill is required." };
 
   if (!token) {
+    const tracking = {
+      waybill: clean,
+      current_status: "Ready for dispatch",
+      provider: "Delhivery",
+      scans: ["Order packed at Doomra workshop", "Waiting for live Delhivery token / AWB sync"],
+    };
     return {
       mock: true,
-      tracking: {
-        waybill: clean,
-        current_status: "Ready for dispatch",
-        provider: "Delhivery",
-        scans: ["Order packed at Doomra workshop", "Waiting for live Delhivery token / AWB sync"],
-      },
+      tracking,
+      summary: summarizeDelhiveryTracking(tracking, clean),
     };
   }
 
@@ -230,5 +305,10 @@ export async function trackDelhiveryShipment(waybill: string) {
     cache: "no-store",
   });
   const tracking = await response.json().catch(() => ({}));
-  return { tracking, status: response.status, ok: response.ok };
+  return {
+    tracking,
+    summary: response.ok ? summarizeDelhiveryTracking(tracking, clean) : null,
+    status: response.status,
+    ok: response.ok,
+  };
 }
