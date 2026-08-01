@@ -1337,6 +1337,9 @@ export function Storefront({ products }: { products: Product[] }) {
           <div>
             <strong className="text-[var(--ink)]">NoteKart, Ward no. 11, Doomra, Nawalgarh, Jhunjhunu</strong>
             <span className="mt-1 block">Notebooks, custom covers, school and business stationery.</span>
+            <a className="footer-whatsapp-link" href="https://wa.me/919461217285?text=Hello%20NoteKart%2C%20I%20need%20help." target="_blank" rel="noreferrer">
+              WhatsApp support: +91 94612 17285
+            </a>
           </div>
           <div className="policy-links">
             <a href="/terms-and-conditions">Terms</a>
