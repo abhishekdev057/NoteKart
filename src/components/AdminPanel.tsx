@@ -200,6 +200,8 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
         if (data.user?.role === "admin") {
           setAuthorized(true);
           void loadAdminData();
+        } else if (data.user) {
+          window.location.replace("/");
         }
       })
       .catch(() => {})
@@ -273,6 +275,21 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     setLoginError("");
     setAuthBusy(true);
     try {
+      const accessResponse = await fetch("/api/auth/admin/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile }),
+      });
+      const accessData = await accessResponse.json();
+      if (!accessResponse.ok) {
+        if (accessResponse.status === 403) {
+          await redirectToStorefront(accessData.redirect);
+          return;
+        }
+        setLoginError(accessData.error ?? "Could not check admin access.");
+        return;
+      }
+
       if (msg91WidgetConfigured()) {
         if (!window.sendOtp) {
           setLoginError("MSG91 OTP is loading. Please try again in a moment.");
@@ -291,10 +308,14 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
       const response = await fetch("/api/auth/otp/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile }),
+        body: JSON.stringify({ mobile, purpose: "admin" }),
       });
       const data = await response.json();
       if (!response.ok) {
+        if (response.status === 403) {
+          await redirectToStorefront(data.redirect);
+          return;
+        }
         setLoginError(data.error ?? "Could not send OTP.");
         return;
       }
@@ -330,16 +351,19 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
         const response = await fetch("/api/auth/msg91-widget/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mobile, accessToken }),
+          body: JSON.stringify({ mobile, accessToken, purpose: "admin" }),
         });
         const data = await response.json();
         if (!response.ok) {
+          if (response.status === 403) {
+            await redirectToStorefront(data.redirect);
+            return;
+          }
           setLoginError(data.error ?? "Could not create NoteKart session.");
           return;
         }
         if (data.user?.role !== "admin") {
-          await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-          setLoginError("This mobile number is not registered as an admin.");
+          await redirectToStorefront();
           return;
         }
         setOtp("");
@@ -352,17 +376,19 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
       const response = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile, code: otp }),
+        body: JSON.stringify({ mobile, code: otp, purpose: "admin" }),
       });
       const data = await response.json();
       if (!response.ok) {
+        if (response.status === 403) {
+          await redirectToStorefront(data.redirect);
+          return;
+        }
         setLoginError(data.error ?? "Verification failed.");
         return;
       }
       if (data.user?.role !== "admin") {
-        // Not an admin number — drop the just-created customer session.
-        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-        setLoginError("This mobile number is not registered as an admin.");
+        await redirectToStorefront();
         return;
       }
       setOtp("");
@@ -372,6 +398,11 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     } finally {
       setAuthBusy(false);
     }
+  }
+
+  async function redirectToStorefront(path = "/") {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    window.location.replace(path || "/");
   }
 
   async function logout() {

@@ -6,10 +6,13 @@ const mobile = z
   .transform((value) => value.replace(/\D/g, "").slice(-10))
   .refine((value) => /^[6-9]\d{9}$/.test(value), { error: "Enter a valid 10 digit mobile number." });
 
-export const otpRequestSchema = z.object({ mobile });
+const authPurpose = z.enum(["customer", "admin"]).default("customer");
+
+export const otpRequestSchema = z.object({ mobile, purpose: authPurpose });
 
 export const otpVerifySchema = z.object({
   mobile,
+  purpose: authPurpose,
   code: z
     .string()
     .trim()
