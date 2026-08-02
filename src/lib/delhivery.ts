@@ -280,19 +280,13 @@ export async function createDelhiveryShipment(order: Order) {
 export async function trackDelhiveryShipment(waybill: string) {
   const clean = waybill.trim();
   const token = getDelhiveryToken();
-  if (!clean) return { error: "Waybill is required." };
+  if (!clean) return { ok: false, status: 400, error: "Waybill is required." };
 
   if (!token) {
-    const tracking = {
-      waybill: clean,
-      current_status: "Ready for dispatch",
-      provider: "Delhivery",
-      scans: ["Order packed at Doomra workshop", "Waiting for live Delhivery token / AWB sync"],
-    };
     return {
-      mock: true,
-      tracking,
-      summary: summarizeDelhiveryTracking(tracking, clean),
+      ok: false,
+      status: 503,
+      error: "Live Delhivery tracking is not configured yet.",
     };
   }
 
@@ -308,10 +302,30 @@ export async function trackDelhiveryShipment(waybill: string) {
     cache: "no-store",
   });
   const tracking = await response.json().catch(() => ({}));
+  const summary = response.ok ? summarizeDelhiveryTracking(tracking, clean) : null;
+  const trackingRecord = asRecord(tracking);
+  const apiError = firstText(
+    trackingRecord?.Error,
+    trackingRecord?.error,
+    trackingRecord?.message,
+    trackingRecord?.remark,
+    trackingRecord?.rmk,
+  );
+
+  if (!response.ok || !summary) {
+    return {
+      tracking,
+      summary: null,
+      status: response.ok ? 404 : response.status,
+      ok: false,
+      error: apiError ?? "No live Delhivery tracking data is available for this AWB yet.",
+    };
+  }
+
   return {
     tracking,
-    summary: response.ok ? summarizeDelhiveryTracking(tracking, clean) : null,
+    summary,
     status: response.status,
-    ok: response.ok,
+    ok: true,
   };
 }

@@ -992,19 +992,39 @@ img {
 }
 
 .delivery-tracking-box {
+  position: relative;
   display: grid;
-  gap: 12px;
+  gap: 14px;
   overflow: hidden;
-  border-radius: 12px;
-  border: 1px solid rgba(12, 143, 132, 0.2);
-  background: linear-gradient(145deg, rgba(12, 143, 132, 0.1), rgba(255, 253, 247, 0.86));
-  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(23, 19, 15, 0.1);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(12, 143, 132, 0.12), transparent 40%),
+    rgba(255, 253, 247, 0.96);
+  padding: 16px;
+  box-shadow: 0 14px 35px rgba(52, 43, 32, 0.08);
+}
+
+.delivery-tracking-box::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--teal), #62c8a8 62%, rgba(98, 200, 168, 0));
+  content: "";
+}
+
+.delivery-tracking-box.is-unavailable::before {
+  background: linear-gradient(90deg, #c17826, rgba(193, 120, 38, 0));
 }
 
 .delivery-tracking-head {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -1012,17 +1032,19 @@ img {
   min-width: 0;
 }
 
-.delivery-tracking-head strong,
-.delivery-tracking-head span {
+.delivery-tracking-head > div > strong,
+.delivery-tracking-head > div > span {
   display: block;
 }
 
-.delivery-tracking-head strong {
+.delivery-tracking-head > div > strong {
+  margin-top: 3px;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
+  letter-spacing: -0.01em;
 }
 
-.delivery-tracking-head span:not(.delivery-tracking-icon) {
+.delivery-tracking-head > div > span:last-child {
   margin-top: 2px;
   color: var(--muted);
   font-size: 11px;
@@ -1030,14 +1052,47 @@ img {
   overflow-wrap: anywhere;
 }
 
+.delivery-tracking-kicker {
+  display: inline-flex !important;
+  width: fit-content;
+  gap: 6px;
+  align-items: center;
+  color: var(--teal);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.delivery-tracking-kicker i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(12, 143, 132, 0.1);
+}
+
+.is-loading .delivery-tracking-kicker i {
+  animation: tracking-pulse 1.25s ease-in-out infinite;
+}
+
+.is-unavailable .delivery-tracking-kicker {
+  color: #a45f18;
+}
+
+.is-unavailable .delivery-tracking-kicker i {
+  box-shadow: 0 0 0 4px rgba(193, 120, 38, 0.12);
+}
+
 .delivery-tracking-icon {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   place-items: center;
-  border-radius: 10px;
-  background: var(--teal);
+  border-radius: 13px;
+  background: linear-gradient(145deg, #0f988c, #087267);
   color: white;
+  box-shadow: 0 8px 18px rgba(12, 143, 132, 0.2);
 }
 
 .delivery-tracking-head button {
@@ -1045,14 +1100,21 @@ img {
   gap: 6px;
   align-items: center;
   border: 1px solid rgba(12, 143, 132, 0.22);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
   color: var(--teal);
-  padding: 8px 10px;
+  padding: 9px 11px;
   font: inherit;
   font-size: 11px;
   font-weight: 850;
   cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.delivery-tracking-head button:hover:not(:disabled) {
+  border-color: rgba(12, 143, 132, 0.42);
+  background: white;
+  transform: translateY(-1px);
 }
 
 .delivery-tracking-head button:disabled {
@@ -1061,14 +1123,18 @@ img {
 }
 
 .delivery-tracking-current {
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.68);
-  padding: 12px;
+  overflow: hidden;
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(98, 200, 168, 0.2), transparent 40%),
+    #17130f;
+  padding: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .delivery-tracking-current > span {
   display: block;
-  color: var(--teal);
+  color: #7fddc6;
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -1077,19 +1143,26 @@ img {
 
 .delivery-tracking-current > strong {
   display: block;
-  margin-top: 4px;
-  color: var(--ink);
-  font-size: 17px;
+  margin-top: 5px;
+  color: #fffdf7;
+  font-size: clamp(18px, 3vw, 22px);
+  letter-spacing: -0.02em;
 }
 
 .delivery-tracking-current p,
-.delivery-scan-list p,
-.delivery-tracking-message {
+.delivery-scan-list p {
   margin: 4px 0 0;
-  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.45;
+}
+
+.delivery-tracking-current p {
+  color: rgba(255, 253, 247, 0.68);
+}
+
+.delivery-scan-list p {
+  color: var(--muted);
 }
 
 .delivery-tracking-facts {
@@ -1103,9 +1176,70 @@ img {
   display: inline-flex;
   gap: 5px;
   align-items: center;
-  color: var(--muted);
+  color: rgba(255, 253, 247, 0.72);
   font-size: 11px;
   font-weight: 750;
+}
+
+.delivery-tracking-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 11px;
+  color: rgba(255, 253, 247, 0.72);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.delivery-tracking-route span:last-child {
+  text-align: right;
+}
+
+.delivery-scan-panel {
+  border: 1px solid rgba(23, 19, 15, 0.08);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 14px;
+}
+
+.delivery-scan-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.delivery-scan-heading div > span,
+.delivery-scan-heading div > strong {
+  display: block;
+}
+
+.delivery-scan-heading div > span {
+  color: var(--teal);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.delivery-scan-heading div > strong {
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.delivery-scan-heading > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(12, 143, 132, 0.09);
+  color: var(--teal);
+  padding: 6px 8px;
+  font-size: 9px;
+  font-weight: 900;
 }
 
 .delivery-scan-list {
@@ -1121,7 +1255,7 @@ img {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
   gap: 8px;
-  padding: 0 0 12px;
+  padding: 0 0 14px;
 }
 
 .delivery-scan-list li:not(:last-child)::before {
@@ -1144,9 +1278,10 @@ img {
   width: 12px;
   height: 12px;
   margin-top: 3px;
-  border: 3px solid rgba(12, 143, 132, 0.24);
+  border: 3px solid rgba(255, 255, 255, 0.9);
   border-radius: 50%;
   background: var(--teal);
+  box-shadow: 0 0 0 3px rgba(12, 143, 132, 0.16);
 }
 
 .delivery-scan-list strong,
@@ -1156,7 +1291,7 @@ img {
 
 .delivery-scan-list strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .delivery-scan-list small {
@@ -1167,7 +1302,52 @@ img {
 }
 
 .delivery-tracking-message {
-  margin: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border: 1px solid rgba(12, 143, 132, 0.12);
+  border-radius: 12px;
+  background: rgba(12, 143, 132, 0.06);
+  padding: 13px;
+}
+
+.delivery-tracking-message > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(12, 143, 132, 0.11);
+  color: var(--teal);
+}
+
+.delivery-tracking-message strong,
+.delivery-tracking-message p {
+  display: block;
+}
+
+.delivery-tracking-message strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.delivery-tracking-message p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.is-unavailable .delivery-tracking-message {
+  border-color: rgba(193, 120, 38, 0.18);
+  background: rgba(193, 120, 38, 0.07);
+}
+
+.is-unavailable .delivery-tracking-message > span {
+  background: rgba(193, 120, 38, 0.12);
+  color: #a45f18;
 }
 
 .tracking-spin {
@@ -1176,6 +1356,10 @@ img {
 
 @keyframes tracking-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes tracking-pulse {
+  50% { opacity: 0.35; transform: scale(0.8); }
 }
 
 .order-timeline {
@@ -2594,6 +2778,33 @@ img {
 
   .floating-card {
     font-size: 12px;
+  }
+
+  .delivery-tracking-box {
+    border-radius: 14px;
+    padding: 14px;
+  }
+
+  .delivery-tracking-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .delivery-tracking-head button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .delivery-tracking-current {
+    padding: 14px;
+  }
+
+  .delivery-tracking-facts {
+    display: grid;
+    gap: 7px;
+  }
+
+  .delivery-scan-heading {
+    align-items: flex-end;
   }
 
   .cart-row,
