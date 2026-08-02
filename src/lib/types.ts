@@ -38,8 +38,8 @@ export type CustomRequest = {
 };
 
 export type DeliveryProvider = "review" | "delhivery" | "post_office" | "manual";
-export type PaymentGateway = "cashfree" | "phonepe" | "razorpay";
-export type OrderPaymentMethod = PaymentGateway | "cod";
+export type PaymentGateway = "cashfree" | "phonepe";
+export type OrderPaymentMethod = PaymentGateway | "razorpay" | "cod";
 
 export type DeliveryTrackingScan = {
   status: string;

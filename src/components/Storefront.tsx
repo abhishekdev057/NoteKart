@@ -300,7 +300,7 @@ export function Storefront({ products }: { products: Product[] }) {
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const cart = useSyncExternalStore(subscribeCart, readStoredCartSnapshot, getServerCartSnapshot);
-  const [selected, setSelected] = useState<Product>(products[0]);
+  const [selected, setSelected] = useState<Product | null>(products[0] ?? null);
   const [imageIndex, setImageIndex] = useState(0);
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
@@ -321,7 +321,9 @@ export function Storefront({ products }: { products: Product[] }) {
   const [customCoverName, setCustomCoverName] = useState("");
   const [customStatus, setCustomStatus] = useState("");
   const [customSubmitted, setCustomSubmitted] = useState(false);
-  const [customizingProductId, setCustomizingProductId] = useState("custom-photo-journal");
+  const [customizingProductId, setCustomizingProductId] = useState(
+    products.find((product) => product.isCustomizable)?.id ?? "",
+  );
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"online" | "cod">("cod");
   const [reviews, setReviews] = useState<ProductReview[]>([]);
@@ -435,6 +437,10 @@ export function Storefront({ products }: { products: Product[] }) {
     () => ["All", ...Array.from(new Set(products.map((product) => product.category)))],
     [products],
   );
+  const customizableProducts = useMemo(
+    () => products.filter((product) => product.isCustomizable),
+    [products],
+  );
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -444,7 +450,7 @@ export function Storefront({ products }: { products: Product[] }) {
   }
 
   function showProduct(product: Product) {
-    if (product.id !== selected.id) {
+    if (product.id !== selected?.id) {
       setSelected(product);
       setImageIndex(0);
       setReviews([]);
@@ -536,7 +542,7 @@ export function Storefront({ products }: { products: Product[] }) {
         return;
       }
       setOtpStage("code");
-      setAuthMessage(data.devCode ? `Dev OTP: ${data.devCode}` : data.message ?? "OTP sent to your mobile.");
+      setAuthMessage(data.message ?? "OTP sent to your mobile.");
     } finally {
       setAuthBusy(false);
     }
@@ -742,7 +748,7 @@ export function Storefront({ products }: { products: Product[] }) {
     setCustomFileUrl("");
     setCustomCoverName("");
     setCustomSubmitted(true);
-    setCustomStatus("Custom album added to cart. Continue to payment from cart.");
+    setCustomStatus(customProduct ? "Custom request saved and product added to cart." : "Custom request saved for admin review.");
   }
 
   async function checkout() {
@@ -823,14 +829,14 @@ export function Storefront({ products }: { products: Product[] }) {
       window.location.href = payment.redirectUrl;
       return;
     }
-    setCheckoutMessage(
-      payment.mock
-        ? `Demo ${payment.label ?? "payment"} order ${payment.paymentReference ?? ""} created. Add gateway credentials to enable live checkout.`
-        : `${payment.label ?? "Payment"} created.`,
-    );
+    setCheckoutMessage("The live payment gateway did not return a checkout link. Please retry or contact support.");
   }
 
   async function submitReview(formData: FormData) {
+    if (!selected) {
+      setReviewStatus("This product is no longer available.");
+      return;
+    }
     if (!user) {
       setReviewStatus("Login with your mobile number to write a review.");
       setAuthOpen(true);
@@ -1002,6 +1008,8 @@ export function Storefront({ products }: { products: Product[] }) {
             ))}
           </div>
 
+          {selected ? (
+            <>
           <div className="mt-8 grid gap-6 rounded-lg border border-black/10 bg-white/72 p-4 shadow-[0_28px_90px_rgba(24,20,14,0.08)] md:grid-cols-[1.1fr_0.9fr] md:p-6">
             <div className="zoom-frame">
               <img src={selected.images[imageIndex] ?? selected.images[0]} alt={selected.name} />
@@ -1112,6 +1120,14 @@ export function Storefront({ products }: { products: Product[] }) {
               </form>
             </div>
           </section>
+            </>
+          ) : (
+            <div className="catalog-empty-state">
+              <Boxes size={30} />
+              <h3>Notebook catalog is being updated</h3>
+              <p>No products are currently published in the database. Please check again soon or contact NoteKart on WhatsApp.</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1135,8 +1151,8 @@ export function Storefront({ products }: { products: Product[] }) {
               <div className="custom-success-icon">
                 <Check size={30} />
               </div>
-              <h3>Album added</h3>
-              <p>Your A4 photo album is in cart. Complete address and payment from the cart to confirm production.</p>
+              <h3>Custom request saved</h3>
+              <p>{customStatus || "Your uploaded design is saved in the database for NoteKart admin review."}</p>
               <button
                 className="primary-button justify-center"
                 type="button"
@@ -1145,7 +1161,7 @@ export function Storefront({ products }: { products: Product[] }) {
                   setCustomStatus("");
                 }}
               >
-                Add another album <Plus size={18} />
+                Add another request <Plus size={18} />
               </button>
             </div>
           ) : (
@@ -1155,15 +1171,23 @@ export function Storefront({ products }: { products: Product[] }) {
                 <select
                   value={customizingProductId}
                   onChange={(e) => setCustomizingProductId(e.target.value)}
+                  disabled={!customizableProducts.length}
                   className="w-full border border-[rgba(250,247,238,0.14)] p-3.5 bg-white/10 text-white rounded-lg focus:outline-none focus:border-[var(--teal)] focus:ring-1 focus:ring-[var(--teal)] transition-all font-semibold"
                 >
-                  <option value="custom-photo-journal" className="bg-[#17130f] text-white">A4 Custom Photo Album (₹199)</option>
-                  <option value="classic-a5-hardbound" className="bg-[#17130f] text-white">Classic A5 Hardbound Notebook (₹249)</option>
+                  {customizableProducts.length ? customizableProducts.map((product) => (
+                    <option value={product.id} className="bg-[#17130f] text-white" key={product.id}>
+                      {product.name} (₹{product.price})
+                    </option>
+                  )) : <option value="" className="bg-[#17130f] text-white">No customizable product is currently published</option>}
                 </select>
               </div>
               {customFileUrl ? (
                 <div className="relative w-full rounded-lg overflow-hidden border border-black/10">
-                  <ThreeDNotebookCustomizer productId={customizingProductId} artworkUrl={customFileUrl} coverName={customCoverName} />
+                  <ThreeDNotebookCustomizer
+                    size={products.find((product) => product.id === customizingProductId)?.specs.Size ?? "A4"}
+                    artworkUrl={customFileUrl}
+                    coverName={customCoverName}
+                  />
                   <div className="upload-preview-overlay z-10">
                     <Check size={18} />
                     <span>Artwork uploaded</span>
@@ -1223,7 +1247,7 @@ export function Storefront({ products }: { products: Product[] }) {
               <input name="quantity" type="number" min="1" defaultValue="1" placeholder="Quantity" />
               <textarea name="notes" placeholder="Cover idea, notebook size, paper type, delivery details" rows={4} />
               <button className="primary-button justify-center" type="submit">
-                Add to cart and pay <Upload size={18} />
+                Save custom request <Upload size={18} />
               </button>
               {customStatus ? <p className="form-status">{customStatus}</p> : null}
             </form>

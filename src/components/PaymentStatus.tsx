@@ -10,18 +10,16 @@ type StatusResponse = {
   normalizedState?: PaymentState;
   state?: string;
   message?: string;
-  mock?: boolean;
   error?: string;
 };
 
 type PaymentStatusProps = {
-  gateway: "cashfree" | "phonepe" | "razorpay";
+  gateway: "cashfree" | "phonepe";
   paymentReference?: string;
 };
 
 function gatewayLabel(gateway: PaymentStatusProps["gateway"]) {
   if (gateway === "phonepe") return "PhonePe";
-  if (gateway === "razorpay") return "Razorpay";
   return "Cashfree";
 }
 

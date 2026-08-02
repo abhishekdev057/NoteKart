@@ -18,12 +18,10 @@ export async function GET(_request: Request, context: Context) {
     const accessToken = await getPhonePeAccessToken();
 
     if (!accessToken) {
-      return NextResponse.json({
-        mock: true,
-        merchantOrderId,
-        normalizedState: "PENDING",
-        message: "PhonePe credentials are not configured.",
-      });
+      return NextResponse.json(
+        { error: "Live PhonePe status checking is not configured." },
+        { status: 503 },
+      );
     }
 
     const response = await fetch(`${getPhonePeBaseUrl()}/checkout/v2/order/${merchantOrderId}/status`, {

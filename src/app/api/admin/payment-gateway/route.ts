@@ -6,7 +6,7 @@ import { normalizePaymentGateway, paymentGatewayLabel } from "@/lib/payments";
 import { requireAdmin } from "@/lib/session";
 
 const gatewaySchema = z.object({
-  gateway: z.enum(["cashfree", "phonepe", "razorpay"]),
+  gateway: z.enum(["cashfree", "phonepe"]),
 });
 
 export async function GET() {

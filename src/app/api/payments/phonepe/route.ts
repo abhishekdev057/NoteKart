@@ -35,16 +35,15 @@ export async function POST(request: Request) {
     const redirectUrl = `${siteUrl()}/payment/phonepe/redirect?merchantOrderId=${merchantOrderId}`;
 
     const accessToken = await getPhonePeAccessToken();
-    await setOrderPhonePeId(order.id, merchantOrderId);
 
     if (!accessToken) {
-      return NextResponse.json({
-        mock: true,
-        merchantOrderId,
-        redirectUrl: null,
-        message: "PhonePe credentials are not configured. Demo order created.",
-      });
+      return NextResponse.json(
+        { error: "PhonePe is not configured. Add live PhonePe credentials before accepting online payments." },
+        { status: 503 },
+      );
     }
+
+    await setOrderPhonePeId(order.id, merchantOrderId);
 
     const response = await fetch(`${getPhonePeBaseUrl()}/checkout/v2/pay`, {
       method: "POST",

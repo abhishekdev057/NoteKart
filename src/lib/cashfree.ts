@@ -53,11 +53,8 @@ export async function createCashfreeOrder(order: Order, customerMobile: string) 
 
   if (!headers) {
     return {
-      mock: true,
-      orderId: cashfreeOrderId,
-      paymentSessionId: null,
-      mode: getCashfreeMode(),
-      message: "Cashfree credentials are not configured.",
+      error: "Cashfree is not configured. Add live Cashfree credentials before accepting online payments.",
+      status: 503,
     };
   }
 

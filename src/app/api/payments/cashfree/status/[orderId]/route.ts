@@ -12,12 +12,10 @@ export async function GET(_request: Request, context: Context) {
     const result = await getCashfreeOrder(orderId);
 
     if (!result) {
-      return NextResponse.json({
-        mock: true,
-        orderId,
-        normalizedState: "PENDING",
-        message: "Cashfree credentials are not configured.",
-      });
+      return NextResponse.json(
+        { error: "Live Cashfree status checking is not configured." },
+        { status: 503 },
+      );
     }
 
     const { response, data } = result;

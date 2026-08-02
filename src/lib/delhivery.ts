@@ -6,7 +6,7 @@ export type DelhiveryServiceability = {
   serviceable: boolean;
   prepaid: boolean;
   cod: boolean;
-  mock?: boolean;
+  status?: number;
   message: string;
 };
 
@@ -45,7 +45,7 @@ function serviceabilityFromPayload(pincode: string, payload: Record<string, unkn
   const postalCode = match?.postal_code as Record<string, unknown> | undefined;
   const prepaid = normalizeFlag(postalCode?.pre_paid ?? postalCode?.prepaid ?? postalCode?.pickup);
   const cod = normalizeFlag(postalCode?.cod);
-  const serviceable = Boolean(match && prepaid);
+  const serviceable = Boolean(match && (prepaid || cod));
 
   return {
     pincode,
@@ -53,7 +53,7 @@ function serviceabilityFromPayload(pincode: string, payload: Record<string, unkn
     prepaid,
     cod,
     message: serviceable
-      ? "Good news, Delhivery can deliver prepaid orders to this area."
+      ? "Good news, live Delhivery service is available for this pincode."
       : "Your area is not serviceable by Delhivery right now. Please try another pincode.",
   };
 }
@@ -74,11 +74,11 @@ export async function checkDelhiveryServiceability(pincode: string): Promise<Del
   if (!token) {
     return {
       pincode: clean,
-      serviceable: true,
-      prepaid: true,
+      serviceable: false,
+      prepaid: false,
       cod: false,
-      mock: true,
-      message: "Delhivery token is not configured, so this area is allowed in demo mode.",
+      status: 503,
+      message: "Live Delhivery serviceability is not configured. Please contact NoteKart support.",
     };
   }
 
@@ -211,12 +211,9 @@ export async function createDelhiveryShipment(order: Order) {
   }
 
   if (!token) {
-    const mockWaybill = `DLV-${order.id.slice(0, 8).toUpperCase()}`;
     return {
-      ok: true,
-      mock: true,
-      waybill: mockWaybill,
-      message: "Demo Delhivery shipment assigned. Configure DELHIVERY_API_TOKEN for live AWB creation.",
+      ok: false,
+      error: "Live Delhivery shipment creation is not configured.",
     };
   }
 
@@ -239,9 +236,6 @@ export async function createDelhiveryShipment(order: Order) {
     shipping_mode: process.env.DELHIVERY_SHIPPING_MODE || "Surface",
     weight: settings.defaultWeightGrams,
   };
-
-  if (process.env.DELHIVERY_SELLER_GST_TIN) shipment.seller_gst_tin = process.env.DELHIVERY_SELLER_GST_TIN;
-  if (process.env.DELHIVERY_HSN_CODE) shipment.hsn_code = process.env.DELHIVERY_HSN_CODE;
 
   const payload = {
     shipments: [shipment],

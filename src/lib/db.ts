@@ -8,62 +8,6 @@ type DbRow = Record<string, unknown>;
 let sqlClient: SqlClient | null = null;
 let schemaReady: Promise<void> | null = null;
 
-const seedProducts: Product[] = [
-  {
-    id: "classic-a5-hardbound",
-    name: "Classic A5 Hardbound Notebook",
-    slug: "classic-a5-hardbound",
-    category: "Hardbound",
-    price: 249,
-    costPrice: 145,
-    compareAtPrice: 320,
-    stock: 180,
-    description: "A durable daily notebook with smooth ruled pages and a premium wraparound cover.",
-    specs: { Size: "A5", Pages: "192", Paper: "80 GSM", Binding: "Hardbound" },
-    images: [
-      "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=1200&q=80",
-      "https://images.unsplash.com/photo-1531346878377-a5be20888e57?auto=format&fit=crop&w=1200&q=80",
-    ],
-    isCustomizable: true,
-    isFeatured: true,
-  },
-  {
-    id: "spiral-campus-pack",
-    name: "Spiral Campus Pack",
-    slug: "spiral-campus-pack",
-    category: "Spiral",
-    price: 129,
-    costPrice: 72,
-    compareAtPrice: 160,
-    stock: 260,
-    description: "Lightweight spiral notebooks for school, coaching and everyday class notes.",
-    specs: { Size: "A4", Pages: "160", Paper: "70 GSM", Binding: "Spiral" },
-    images: [
-      "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1200&q=80",
-    ],
-    isCustomizable: false,
-    isFeatured: true,
-  },
-  {
-    id: "custom-photo-journal",
-    name: "A4 Custom Photo Album",
-    slug: "custom-photo-journal",
-    category: "Customized",
-    price: 199,
-    costPrice: 110,
-    compareAtPrice: 249,
-    stock: 75,
-    description: "A4 custom photo album with your cover photo and optional printed name.",
-    specs: { Size: "A4", Pages: "120-240", Finish: "Matte or Gloss", MOQ: "1 piece" },
-    images: [
-      "https://images.unsplash.com/photo-1516796181074-bf453fbfa3e6?auto=format&fit=crop&w=1200&q=80",
-      "https://images.unsplash.com/photo-1516387938699-a93567ec168e?auto=format&fit=crop&w=1200&q=80",
-    ],
-    isCustomizable: true,
-    isFeatured: true,
-  },
-];
-
 function getSql() {
   if (!sqlClient) {
     const url = process.env.DATABASE_URL;
@@ -193,12 +137,6 @@ async function ensureSchema() {
     )
   `;
 
-  const count = (await sql`SELECT COUNT(*)::int AS count FROM products`) as DbRow[];
-  if (Number(count[0]?.count ?? 0) === 0) {
-    for (const product of seedProducts) {
-      await writeProduct(product);
-    }
-  }
 }
 
 export async function readyDb() {
@@ -226,7 +164,6 @@ function rowToProduct(row: Record<string, unknown>): Product {
 }
 
 export async function listProducts() {
-  if (!process.env.DATABASE_URL) return seedProducts;
   await readyDb();
   const rows = (await getSql()`SELECT * FROM products ORDER BY is_featured DESC, created_at DESC`) as DbRow[];
   return rows.map(rowToProduct);
@@ -293,6 +230,17 @@ export async function listCustomRequests() {
   })) satisfies CustomRequest[];
 }
 
+export async function deleteCustomRequests(ids: string[]) {
+  await readyDb();
+  if (!ids.length) return [];
+  const rows = (await getSql()`
+    DELETE FROM custom_requests
+    WHERE id = ANY(${ids})
+    RETURNING id
+  `) as DbRow[];
+  return rows.map((row) => String(row.id));
+}
+
 type NewOrder = Omit<Order, "id" | "paymentStatus" | "deliveryStatus" | "createdAt"> & {
   paymentStatus?: string;
   deliveryStatus?: string;
@@ -331,7 +279,13 @@ function rowToOrder(row: DbRow): Order {
     deliveryProvider: row.delivery_provider ? (String(row.delivery_provider) as Order["deliveryProvider"]) : "review",
     deliveryTrackingNumber: row.delivery_tracking_number ? String(row.delivery_tracking_number) : null,
     deliveryNotes: row.delivery_notes ? String(row.delivery_notes) : null,
-    paymentGateway: row.payment_gateway === "cod" ? "cod" : row.payment_gateway ? normalizePaymentGateway(row.payment_gateway) : "cashfree",
+    paymentGateway: row.payment_gateway === "cod"
+      ? "cod"
+      : row.payment_gateway === "razorpay"
+        ? "razorpay"
+        : row.payment_gateway
+          ? normalizePaymentGateway(row.payment_gateway)
+          : "cashfree",
     paymentReference: row.payment_reference ? String(row.payment_reference) : null,
     phonepePaymentId: row.phonepe_payment_id ? String(row.phonepe_payment_id) : null,
     createdAt: row.created_at ? String(row.created_at) : undefined,
@@ -348,6 +302,17 @@ export async function listOrdersByMobile(mobile: string) {
   await readyDb();
   const rows = (await getSql()`SELECT * FROM orders WHERE mobile = ${mobile} ORDER BY created_at DESC`) as DbRow[];
   return rows.map(rowToOrder);
+}
+
+export async function deleteOrders(ids: string[]) {
+  await readyDb();
+  if (!ids.length) return [];
+  const rows = (await getSql()`
+    DELETE FROM orders
+    WHERE id = ANY(${ids})
+    RETURNING id
+  `) as DbRow[];
+  return rows.map((row) => String(row.id));
 }
 
 export async function updateOrderDelivery(
@@ -469,7 +434,6 @@ export async function setDelhiverySettings(settings: DelhiverySettings) {
 }
 
 export async function listProductReviews(productId: string) {
-  if (!process.env.DATABASE_URL) return [];
   await readyDb();
   const rows = (await getSql()`
     SELECT id, product_id, customer_name, rating, title, comment, is_verified_purchase, created_at

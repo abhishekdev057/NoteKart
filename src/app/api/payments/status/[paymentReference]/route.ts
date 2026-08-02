@@ -20,11 +20,10 @@ export async function GET(_request: Request, context: Context) {
       return NextResponse.redirect(new URL(`/api/payments/phonepe/status/${paymentReference}`, _request.url));
     }
 
-    return NextResponse.json({
-      paymentReference,
-      normalizedState: order.paymentStatus === "paid" ? "COMPLETED" : "PENDING",
-      message: "Razorpay status checking is not configured yet.",
-    });
+    return NextResponse.json(
+      { error: "This payment gateway is not supported for live status checking." },
+      { status: 409 },
+    );
   } catch (error) {
     return errorResponse(error, "Unable to check payment status.");
   }

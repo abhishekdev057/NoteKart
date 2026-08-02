@@ -32,7 +32,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/orders
       }
       trackingNumber = shipment.waybill;
       deliveryStatus = "shipped";
-      deliveryNotes = [deliveryNotes, shipment.message ?? "Delhivery AWB generated automatically."]
+      deliveryNotes = [deliveryNotes, "Delhivery AWB generated automatically."]
         .filter(Boolean)
         .join("\n");
     }

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { checkDelhiveryServiceability, extractPincode } from "@/lib/delhivery";
-import { createOrder, decrementStock, getProductsByIds, listOrders } from "@/lib/db";
+import { createOrder, decrementStock, deleteOrders, getProductsByIds, listOrders } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/session";
-import { orderSchema } from "@/lib/validation";
+import { adminDeleteManySchema, orderSchema } from "@/lib/validation";
 import { errorResponse } from "@/lib/http";
 
 export async function GET() {
@@ -14,19 +14,37 @@ export async function GET() {
   }
 }
 
+export async function DELETE(request: Request) {
+  try {
+    await requireAdmin();
+    const { ids } = adminDeleteManySchema.parse(await request.json().catch(() => ({})));
+    const deletedIds = await deleteOrders(Array.from(new Set(ids)));
+    return NextResponse.json({ ok: true, deletedIds, deletedCount: deletedIds.length });
+  } catch (error) {
+    return errorResponse(error, "Unable to delete orders.");
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const session = await requireUser();
     const input = orderSchema.parse(await request.json());
     const pincode = extractPincode(input.address);
     const serviceability = await checkDelhiveryServiceability(pincode);
-    if (!serviceability.serviceable) {
+    const selectedMethodIsServiceable = input.paymentMethod === "cod"
+      ? serviceability.cod
+      : serviceability.prepaid;
+    if (!serviceability.serviceable || !selectedMethodIsServiceable) {
       return NextResponse.json(
         {
-          error: serviceability.message || "Your area is not serviceable by Delhivery right now. Please try another location.",
+          error: serviceability.status === 503
+            ? serviceability.message
+            : input.paymentMethod === "cod"
+              ? "Cash on Delivery is not available for this pincode. Choose online payment or another address."
+              : "Prepaid Delhivery service is not available for this pincode. Please try another address.",
           serviceability,
         },
-        { status: 422 },
+        { status: serviceability.status ?? 422 },
       );
     }
 

@@ -6,13 +6,13 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Loader2 } from "lucide-react";
 
 interface ThreeDNotebookCustomizerProps {
-  productId?: string;
+  size?: string;
   artworkUrl?: string;
   coverName?: string;
 }
 
 export default function ThreeDNotebookCustomizer({
-  productId = "custom-photo-journal",
+  size = "A4",
   artworkUrl,
   coverName = "",
 }: ThreeDNotebookCustomizerProps) {
@@ -24,7 +24,7 @@ export default function ThreeDNotebookCustomizer({
   const textureRef = useRef<THREE.CanvasTexture | null>(null);
   const canvas2dRef = useRef<HTMLCanvasElement | null>(null);
 
-  const isA5 = productId === "classic-a5-hardbound";
+  const isA5 = size.trim().toUpperCase() === "A5";
 
   // Redraws the 2D canvas texture
   const updateTexture = (artUrl?: string, nameText?: string) => {
@@ -418,7 +418,7 @@ export default function ThreeDNotebookCustomizer({
       shadowPlaneGeo.dispose();
       shadowPlaneMat.dispose();
     };
-  }, [productId, !!artworkUrl]); // Re-create scene if product model or artwork state changes
+  }, [size, !!artworkUrl]); // Re-create scene if product format or artwork state changes
 
   // Watch parameters for live texture changes (no scene re-creation)
   useEffect(() => {

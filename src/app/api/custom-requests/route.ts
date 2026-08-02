@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { consumeRateLimit, createCustomRequest, listCustomRequests } from "@/lib/db";
+import { consumeRateLimit, createCustomRequest, deleteCustomRequests, listCustomRequests } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { customRequestSchema } from "@/lib/validation";
+import { adminDeleteManySchema, customRequestSchema } from "@/lib/validation";
 import { clientIp, errorResponse } from "@/lib/http";
 
 export async function GET() {
@@ -10,6 +10,17 @@ export async function GET() {
     return NextResponse.json({ requests: await listCustomRequests() });
   } catch (error) {
     return errorResponse(error, "Unable to load requests.");
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    await requireAdmin();
+    const { ids } = adminDeleteManySchema.parse(await request.json().catch(() => ({})));
+    const deletedIds = await deleteCustomRequests(Array.from(new Set(ids)));
+    return NextResponse.json({ ok: true, deletedIds, deletedCount: deletedIds.length });
+  } catch (error) {
+    return errorResponse(error, "Unable to delete custom requests.");
   }
 }
 

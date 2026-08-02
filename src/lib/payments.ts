@@ -1,6 +1,6 @@
 import type { OrderPaymentMethod, PaymentGateway } from "./types";
 
-export const paymentGateways = ["cashfree", "phonepe", "razorpay"] as const satisfies readonly PaymentGateway[];
+export const paymentGateways = ["cashfree", "phonepe"] as const satisfies readonly PaymentGateway[];
 
 export function normalizePaymentGateway(value: unknown): PaymentGateway {
   return paymentGateways.includes(value as PaymentGateway) ? (value as PaymentGateway) : "cashfree";

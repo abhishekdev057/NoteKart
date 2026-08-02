@@ -15,17 +15,15 @@ async function createPhonePePayment(orderId: string, amount: number, mobile: str
   const amountPaise = amount * 100;
   const redirectUrl = `${siteUrl()}/payment/phonepe/redirect?merchantOrderId=${merchantOrderId}`;
   const accessToken = await getPhonePeAccessToken();
-  await setOrderPhonePeId(orderId, merchantOrderId);
 
   if (!accessToken) {
     return {
-      mock: true,
-      gateway: "phonepe",
-      paymentReference: merchantOrderId,
-      redirectUrl: null,
-      message: "PhonePe credentials are not configured.",
+      error: "PhonePe is not configured. Add live PhonePe credentials before accepting online payments.",
+      status: 503,
     };
   }
+
+  await setOrderPhonePeId(orderId, merchantOrderId);
 
   const response = await fetch(`${getPhonePeBaseUrl()}/checkout/v2/pay`, {
     method: "POST",
@@ -85,7 +83,7 @@ export async function POST(request: Request) {
       if ("error" in payment) {
         return NextResponse.json({ error: payment.error }, { status: payment.status });
       }
-      if (!payment.mock && !payment.paymentSessionId) {
+      if (!payment.paymentSessionId) {
         return NextResponse.json({ error: "Cashfree did not return a payment session. Please retry checkout." }, { status: 502 });
       }
       await setOrderPaymentReference(order.id, "cashfree", payment.orderId);
@@ -95,8 +93,6 @@ export async function POST(request: Request) {
         paymentReference: payment.orderId,
         paymentSessionId: payment.paymentSessionId,
         mode: payment.mode,
-        mock: payment.mock ?? false,
-        message: payment.message,
       });
     }
 
@@ -108,13 +104,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ label: paymentGatewayLabel(gateway), ...payment });
     }
 
-    return NextResponse.json(
-      {
-        error:
-          "Razorpay is selectable in admin, but live Razorpay credentials and checkout have not been configured yet. Switch to Cashfree or PhonePe to accept payments.",
-      },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: "The active payment gateway is not supported." }, { status: 409 });
   } catch (error) {
     return errorResponse(error, "Unable to create payment.");
   }

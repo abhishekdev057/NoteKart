@@ -29,14 +29,10 @@ export async function POST(request: Request) {
     const token = await getShiprocketToken();
 
     if (!token) {
-      return NextResponse.json({
-        mock: true,
-        tracking: {
-          awb,
-          current_status: "Ready to ship",
-          scans: ["Order packed at Doomra workshop", "Awaiting courier pickup"],
-        },
-      });
+      return NextResponse.json(
+        { error: "Live Shiprocket tracking is not configured." },
+        { status: 503 },
+      );
     }
 
     const response = await fetch(`https://apiv2.shiprocket.in/v1/external/courier/track/awb/${awb}`, {

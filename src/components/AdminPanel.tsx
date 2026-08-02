@@ -59,6 +59,8 @@ type AdminPanelProps = {
   section?: AdminSection;
 };
 
+type DeleteResult = { ok: boolean; message: string };
+
 type Msg91VerifyData = Record<string, unknown>;
 type ProductForm = {
   id?: string;
@@ -121,7 +123,6 @@ const deliveryProviders: Array<{ value: DeliveryProvider; label: string }> = [
 const gatewayOptions: Array<{ value: PaymentGateway; label: string; note: string }> = [
   { value: "cashfree", label: "Cashfree", note: "Default checkout for live customer payments" },
   { value: "phonepe", label: "PhonePe", note: "Available when PhonePe credentials are active" },
-  { value: "razorpay", label: "Razorpay", note: "Selectable placeholder until Razorpay keys are configured" },
 ];
 
 function sectionTitle(section: AdminSection) {
@@ -362,7 +363,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
         return;
       }
       setOtpStage("code");
-      if (data.devCode) setLoginError(`Dev OTP: ${data.devCode}`);
+      setLoginError(data.message ?? "OTP sent to your mobile.");
     } finally {
       setAuthBusy(false);
     }
@@ -510,6 +511,32 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
       setProductEditorOpen(false);
     }
     await loadAdminData();
+  }
+
+  async function deleteAdminRecords(resource: "orders" | "custom-requests", ids: string[]): Promise<DeleteResult> {
+    const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
+    if (!uniqueIds.length) return { ok: false, message: "Select at least one record." };
+
+    try {
+      const response = uniqueIds.length === 1
+        ? await fetch(`/api/${resource}/${encodeURIComponent(uniqueIds[0])}`, { method: "DELETE" })
+        : await fetch(`/api/${resource}`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: uniqueIds }),
+          });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { ok: false, message: data.error ?? "Could not delete the selected records." };
+      }
+      await loadAdminData();
+      return {
+        ok: true,
+        message: `${data.deletedCount ?? uniqueIds.length} ${resource === "orders" ? "order" : "request"}${(data.deletedCount ?? uniqueIds.length) === 1 ? "" : "s"} permanently deleted.`,
+      };
+    } catch {
+      return { ok: false, message: "Could not connect while deleting records." };
+    }
   }
 
   function productToForm(product: Product): ProductForm {
@@ -704,8 +731,19 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
             onUploadProductImage={uploadProductImage}
           />
         ) : null}
-        {section === "custom-requests" ? <CustomRequestsPanel requests={requests} /> : null}
-        {section === "orders" ? <OrdersPanel orders={orders} products={products} /> : null}
+        {section === "custom-requests" ? (
+          <CustomRequestsPanel
+            requests={requests}
+            onDeleteRequests={(ids) => deleteAdminRecords("custom-requests", ids)}
+          />
+        ) : null}
+        {section === "orders" ? (
+          <OrdersPanel
+            orders={orders}
+            products={products}
+            onDeleteOrders={(ids) => deleteAdminRecords("orders", ids)}
+          />
+        ) : null}
         {section === "delivery" ? (
           <DeliveryPanel
             delhiverySettings={delhiverySettings}
@@ -716,6 +754,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
             onDelhiverySettingsChange={setDelhiverySettings}
             onDelhiverySettingsSave={saveDelhiverySettings}
             onDeliverySaved={loadAdminData}
+            onDeleteOrders={(ids) => deleteAdminRecords("orders", ids)}
           />
         ) : null}
       </section>
@@ -1220,10 +1259,53 @@ function ProductsPanel({
   );
 }
 
-function CustomRequestsPanel({ requests }: { requests: CustomRequest[] }) {
+function SelectionToolbar({
+  selectedCount,
+  visibleCount,
+  allVisibleSelected,
+  busy,
+  label,
+  message,
+  onToggleVisible,
+  onDeleteSelected,
+}: {
+  selectedCount: number;
+  visibleCount: number;
+  allVisibleSelected: boolean;
+  busy: boolean;
+  label: string;
+  message: string;
+  onToggleVisible: () => void;
+  onDeleteSelected: () => void;
+}) {
+  return (
+    <div className="admin-selection-toolbar">
+      <label>
+        <input type="checkbox" checked={allVisibleSelected && visibleCount > 0} onChange={onToggleVisible} disabled={!visibleCount} />
+        Select all {visibleCount} visible
+      </label>
+      <span>{selectedCount ? `${selectedCount} selected` : `Select ${label} to manage them together`}</span>
+      <button className="admin-danger-button" type="button" disabled={!selectedCount || busy} onClick={onDeleteSelected}>
+        <Trash2 size={16} /> {busy ? "Deleting..." : `Delete selected${selectedCount ? ` (${selectedCount})` : ""}`}
+      </button>
+      {message ? <p className="admin-selection-message">{message}</p> : null}
+    </div>
+  );
+}
+
+function CustomRequestsPanel({
+  requests,
+  onDeleteRequests,
+}: {
+  requests: CustomRequest[];
+  onDeleteRequests: (ids: string[]) => Promise<DeleteResult>;
+}) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState<DateFilterValue>(emptyDateFilter);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const statuses = Array.from(new Set(requests.map((request) => request.status))).sort();
   const visibleRequests = requests.filter((request) => {
@@ -1233,6 +1315,35 @@ function CustomRequestsPanel({ requests }: { requests: CustomRequest[] }) {
       .some((value) => value.toLowerCase().includes(normalizedQuery));
     return matchesStatus && matchesDate && matchesQuery;
   });
+  const visibleIds = visibleRequests.map((request) => request.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      visibleIds.forEach((id) => allVisibleSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  }
+
+  async function removeRequests(ids: string[]) {
+    if (!ids.length || !window.confirm(`Permanently delete ${ids.length} custom request${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    setDeleteBusy(true);
+    setDeleteMessage("");
+    const result = await onDeleteRequests(ids);
+    setDeleteMessage(result.message);
+    if (result.ok) setSelectedIds(new Set());
+    setDeleteBusy(false);
+  }
 
   return (
     <section className="admin-panel">
@@ -1256,31 +1367,64 @@ function CustomRequestsPanel({ requests }: { requests: CustomRequest[] }) {
         <DateFilterBar value={dateFilter} onChange={setDateFilter} />
       </div>
       <div className="admin-filter-result"><strong>{visibleRequests.length}</strong> of {requests.length} requests shown</div>
-      <div className="admin-table">
-        {visibleRequests.map((request) => (
-          <div className="admin-row" key={request.id}>
-            {request.imageUrl ? <img src={request.imageUrl} alt={request.customerName} /> : <span className="empty-thumb" />}
-            <div>
-              <strong>{request.customerName} · {request.mobile}</strong>
-              <span>{request.quantity} pcs · {request.notes}</span>
-              <span>{request.status} · {formatAdminDate(request.createdAt)}</span>
-            </div>
-            <CheckCircle2 size={20} />
-          </div>
-        ))}
-        {!visibleRequests.length ? (
-          <div className="admin-empty-state"><ImagePlus size={25} /><strong>No matching custom requests</strong><span>Try another search, status, or calendar range.</span></div>
-        ) : null}
-      </div>
+      <SelectionToolbar
+        selectedCount={selectedIds.size}
+        visibleCount={visibleIds.length}
+        allVisibleSelected={allVisibleSelected}
+        busy={deleteBusy}
+        label="requests"
+        message={deleteMessage}
+        onToggleVisible={toggleVisible}
+        onDeleteSelected={() => void removeRequests(Array.from(selectedIds))}
+      />
+      {visibleRequests.length ? (
+        <div className="admin-record-table-wrap">
+          <table className="admin-record-table custom-request-table">
+            <thead>
+              <tr><th aria-label="Select" /><th>Request</th><th>Customer</th><th>Details</th><th>Status & date</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {visibleRequests.map((request) => (
+                <tr className={selectedIds.has(request.id) ? "is-selected" : ""} key={request.id}>
+                  <td><input type="checkbox" checked={selectedIds.has(request.id)} onChange={() => toggleSelected(request.id)} aria-label={`Select request ${request.id}`} /></td>
+                  <td>
+                    <div className="admin-record-media">
+                      {request.imageUrl ? <img src={request.imageUrl} alt="" /> : <span className="empty-thumb"><ImagePlus size={18} /></span>}
+                      <div><strong>#{request.id.slice(0, 8)}</strong><span>{request.quantity} notebook{request.quantity === 1 ? "" : "s"}</span></div>
+                    </div>
+                  </td>
+                  <td><strong>{request.customerName}</strong><span>{request.mobile}</span></td>
+                  <td className="admin-record-notes">{request.notes || "No additional notes"}</td>
+                  <td><span className="admin-record-status">{request.status}</span><span>{formatAdminDate(request.createdAt)}</span></td>
+                  <td><button className="admin-row-delete" type="button" onClick={() => void removeRequests([request.id])} disabled={deleteBusy} aria-label={`Delete request ${request.id}`}><Trash2 size={16} /> Delete</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="admin-empty-state"><ImagePlus size={25} /><strong>No matching custom requests</strong><span>Try another search, status, or calendar range.</span></div>
+      )}
     </section>
   );
 }
 
-function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[] }) {
+function OrdersPanel({
+  orders,
+  products,
+  onDeleteOrders,
+}: {
+  orders: Order[];
+  products: Product[];
+  onDeleteOrders: (ids: string[]) => Promise<DeleteResult>;
+}) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CanonicalOrderStatus>("all");
   const [gatewayFilter, setGatewayFilter] = useState<"all" | Order["paymentGateway"]>("all");
   const [dateFilter, setDateFilter] = useState<DateFilterValue>(emptyDateFilter);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOrders = orders.filter((order) => {
     const matchesStatus = statusFilter === "all" || canonicalOrderStatus(order.deliveryStatus) === statusFilter;
@@ -1290,6 +1434,35 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
       .some((value) => value.toLowerCase().includes(normalizedQuery));
     return matchesStatus && matchesGateway && matchesDate && matchesQuery;
   });
+  const visibleIds = visibleOrders.map((order) => order.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      visibleIds.forEach((id) => allVisibleSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  }
+
+  async function removeOrders(ids: string[]) {
+    if (!ids.length || !window.confirm(`Permanently delete ${ids.length} order${ids.length === 1 ? "" : "s"}? This removes the records from the database and cannot be undone.`)) return;
+    setDeleteBusy(true);
+    setDeleteMessage("");
+    const result = await onDeleteOrders(ids);
+    setDeleteMessage(result.message);
+    if (result.ok) setSelectedIds(new Set());
+    setDeleteBusy(false);
+  }
 
   return (
     <section className="admin-panel">
@@ -1309,6 +1482,7 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
             <option value="all">All payment methods</option>
             <option value="cod">Cash on Delivery</option>
             {gatewayOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+            {orders.some((order) => order.paymentGateway === "razorpay") ? <option value="razorpay">Razorpay (historical)</option> : null}
           </select>
         </label>
         <DateFilterBar value={dateFilter} onChange={setDateFilter} />
@@ -1322,46 +1496,56 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
         ))}
       </div>
       <div className="admin-filter-result"><strong>{visibleOrders.length}</strong> of {orders.length} orders shown</div>
-      <div className="admin-orders-list">
-        {visibleOrders.map((order) => (
-          <article className="admin-order-card" key={order.id}>
-            <div className="admin-order-head">
-              <div>
-                <span className={`order-state-pill ${canonicalOrderStatus(order.deliveryStatus)}`}>{canonicalOrderStatus(order.deliveryStatus) === "printing" ? "Printing / Processing" : canonicalOrderStatus(order.deliveryStatus)}</span>
-                <strong>{order.customerName} · ₹{order.amount.toLocaleString("en-IN")}</strong>
-                <span>Order #{order.id}</span>
-                <span>{formatAdminDate(order.createdAt)}</span>
-              </div>
-              <div className="admin-order-contact">
-                <strong>{order.mobile}</strong>
-                <span>{order.paymentGateway === "cod" ? "Cash on Delivery" : `${order.paymentStatus} · ${order.paymentGateway ?? "online"}`}</span>
-              </div>
-            </div>
-            <div className="admin-order-products">
-              {order.items.map((item, index) => (
-                <div className="admin-order-product" key={`${order.id}-${item.productId}-${index}`}>
-                  {item.customArtworkUrl || item.imageUrl || products.find((product) => product.id === item.productId)?.images[0] ? (
-                    <img src={item.customArtworkUrl ?? item.imageUrl ?? products.find((product) => product.id === item.productId)?.images[0] ?? ""} alt={item.name} />
-                  ) : <span className="empty-thumb"><PackageCheck size={20} /></span>}
-                  <div>
-                    <strong>{item.quantity} × {item.name}</strong>
-                    <span>₹{item.price} each · Line total ₹{item.price * item.quantity}</span>
-                    {item.customCoverName ? <span className="custom-order-detail">Print name: {item.customCoverName}</span> : null}
-                    {item.customArtworkUrl ? <a href={item.customArtworkUrl} target="_blank" rel="noreferrer">Open customer artwork</a> : null}
-                  </div>
-                </div>
+      <SelectionToolbar
+        selectedCount={selectedIds.size}
+        visibleCount={visibleIds.length}
+        allVisibleSelected={allVisibleSelected}
+        busy={deleteBusy}
+        label="orders"
+        message={deleteMessage}
+        onToggleVisible={toggleVisible}
+        onDeleteSelected={() => void removeOrders(Array.from(selectedIds))}
+      />
+      {visibleOrders.length ? (
+        <div className="admin-record-table-wrap">
+          <table className="admin-record-table orders-record-table">
+            <thead>
+              <tr><th aria-label="Select" /><th>Order & notebooks</th><th>Customer</th><th>Payment</th><th>Delivery</th><th>Total & date</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {visibleOrders.map((order) => (
+                <tr className={selectedIds.has(order.id) ? "is-selected" : ""} key={order.id}>
+                  <td><input type="checkbox" checked={selectedIds.has(order.id)} onChange={() => toggleSelected(order.id)} aria-label={`Select order ${order.id}`} /></td>
+                  <td>
+                    <strong>#{order.id.slice(0, 8)}</strong>
+                    <span>{order.items.reduce((sum, item) => sum + item.quantity, 0)} items · {order.items.length} lines</span>
+                    <details className="admin-row-details">
+                      <summary>View ordered notebooks</summary>
+                      <div className="admin-order-products compact-products">
+                        {order.items.map((item, index) => (
+                          <div className="admin-order-product" key={`${order.id}-${item.productId}-${index}`}>
+                            {item.customArtworkUrl || item.imageUrl || products.find((product) => product.id === item.productId)?.images[0] ? (
+                              <img src={item.customArtworkUrl ?? item.imageUrl ?? products.find((product) => product.id === item.productId)?.images[0] ?? ""} alt={item.name} />
+                            ) : <span className="empty-thumb"><PackageCheck size={18} /></span>}
+                            <div><strong>{item.quantity} × {item.name}</strong><span>₹{item.price} each</span>{item.customCoverName ? <span className="custom-order-detail">Print: {item.customCoverName}</span> : null}{item.customArtworkUrl ? <a href={item.customArtworkUrl} target="_blank" rel="noreferrer">Open artwork</a> : null}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </td>
+                  <td><strong>{order.customerName}</strong><span>{order.mobile}</span><span className="admin-record-address">{order.address}</span></td>
+                  <td><strong>{order.paymentGateway === "cod" ? "Cash on Delivery" : paymentGatewayLabelForAdmin(order.paymentGateway)}</strong><span className={`payment-state-pill ${paymentState(order.paymentStatus)}`}>{order.paymentStatus}</span>{order.paymentReference ? <span>Ref: {order.paymentReference}</span> : null}</td>
+                  <td><span className={`order-state-pill ${canonicalOrderStatus(order.deliveryStatus)}`}>{canonicalOrderStatus(order.deliveryStatus) === "printing" ? "Printing / Processing" : canonicalOrderStatus(order.deliveryStatus)}</span><span>{formatProvider(order.deliveryProvider)}</span>{order.deliveryTrackingNumber ? <span>AWB: {order.deliveryTrackingNumber}</span> : null}</td>
+                  <td><strong>₹{order.amount.toLocaleString("en-IN")}</strong><span>{formatAdminDate(order.createdAt)}</span></td>
+                  <td><button className="admin-row-delete" type="button" onClick={() => void removeOrders([order.id])} disabled={deleteBusy} aria-label={`Delete order ${order.id}`}><Trash2 size={16} /> Delete</button></td>
+                </tr>
               ))}
-            </div>
-            <div className="admin-order-address">
-              <span><strong>Deliver to:</strong> {order.address}</span>
-              <span>{formatProvider(order.deliveryProvider)}{order.deliveryTrackingNumber ? ` · ${order.deliveryTrackingNumber}` : ""}</span>
-            </div>
-          </article>
-        ))}
-        {!visibleOrders.length ? (
-          <div className="admin-empty-state"><Search size={25} /><strong>No matching orders</strong><span>Try another search, status, payment method, or calendar range.</span></div>
-        ) : null}
-      </div>
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="admin-empty-state"><Search size={25} /><strong>No matching orders</strong><span>Try another search, status, payment method, or calendar range.</span></div>
+      )}
     </section>
   );
 }
@@ -1375,6 +1559,7 @@ function DeliveryPanel({
   onDelhiverySettingsChange,
   onDelhiverySettingsSave,
   onDeliverySaved,
+  onDeleteOrders,
 }: {
   delhiverySettings: DelhiverySettings;
   delhiverySettingsMessage: string;
@@ -1384,11 +1569,15 @@ function DeliveryPanel({
   onDelhiverySettingsChange: (settings: DelhiverySettings) => void;
   onDelhiverySettingsSave: () => Promise<void>;
   onDeliverySaved: () => Promise<void>;
+  onDeleteOrders: (ids: string[]) => Promise<DeleteResult>;
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CanonicalOrderStatus>("all");
   const [providerFilter, setProviderFilter] = useState<"all" | DeliveryProvider>("all");
   const [dateFilter, setDateFilter] = useState<DateFilterValue>(emptyDateFilter);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOrders = orders.filter((order) => {
     const matchesStatus = statusFilter === "all" || canonicalOrderStatus(order.deliveryStatus) === statusFilter;
@@ -1403,6 +1592,35 @@ function DeliveryPanel({
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
     return matchesStatus && matchesProvider && matchesDate && matchesQuery;
   });
+  const visibleIds = visibleOrders.map((order) => order.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      visibleIds.forEach((id) => allVisibleSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  }
+
+  async function removeOrders(ids: string[]) {
+    if (!ids.length || !window.confirm(`Permanently delete ${ids.length} delivery order${ids.length === 1 ? "" : "s"}? This removes the complete order record and cannot be undone.`)) return;
+    setDeleteBusy(true);
+    setDeleteMessage("");
+    const result = await onDeleteOrders(ids);
+    setDeleteMessage(result.message);
+    if (result.ok) setSelectedIds(new Set());
+    setDeleteBusy(false);
+  }
 
   return (
     <section className="admin-section-stack">
@@ -1481,42 +1699,52 @@ function DeliveryPanel({
           <DateFilterBar value={dateFilter} onChange={setDateFilter} />
         </div>
         <div className="admin-filter-result"><strong>{visibleOrders.length}</strong> of {orders.length} delivery orders shown</div>
-        <div className="admin-table">
-          {visibleOrders.map((order) => (
-            <div className="delivery-card" key={order.id}>
-              <div>
-                <strong>{order.customerName} · ₹{order.amount}</strong>
-                <span>{order.mobile}</span>
-                <span>{order.address}</span>
-                <span>{order.paymentStatus} payment · {order.items.length} item lines</span>
-                <span>{formatAdminDate(order.createdAt)}</span>
-                <div className="delivery-order-items">
-                  {order.items.map((item, index) => (
-                    <div key={`${order.id}-${item.productId}-${index}`}>
-                      {item.customArtworkUrl || item.imageUrl || products.find((product) => product.id === item.productId)?.images[0] ? (
-                        <img src={item.customArtworkUrl ?? item.imageUrl ?? products.find((product) => product.id === item.productId)?.images[0] ?? ""} alt={item.name} />
-                      ) : <span className="empty-thumb" />}
-                      <span>{item.quantity} × {item.name}{item.customCoverName ? ` · ${item.customCoverName}` : ""}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="delivery-card-actions">
-                <DeliveryAssignmentForm order={order} onSaved={onDeliverySaved} />
-                {order.deliveryProvider === "delhivery" && order.deliveryTrackingNumber ? (
-                  <DelhiveryTrackingCard
-                    admin
-                    orderId={order.id}
-                    waybill={order.deliveryTrackingNumber}
-                  />
-                ) : null}
-              </div>
-            </div>
-          ))}
-          {!visibleOrders.length ? (
-            <div className="admin-empty-state"><ShipWheel size={25} /><strong>No matching delivery orders</strong><span>Try another search, status, provider, or calendar range.</span></div>
-          ) : null}
-        </div>
+        <SelectionToolbar
+          selectedCount={selectedIds.size}
+          visibleCount={visibleIds.length}
+          allVisibleSelected={allVisibleSelected}
+          busy={deleteBusy}
+          label="delivery orders"
+          message={deleteMessage}
+          onToggleVisible={toggleVisible}
+          onDeleteSelected={() => void removeOrders(Array.from(selectedIds))}
+        />
+        {visibleOrders.length ? (
+          <div className="admin-record-table-wrap">
+            <table className="admin-record-table delivery-record-table">
+              <thead>
+                <tr><th aria-label="Select" /><th>Order</th><th>Customer & address</th><th>Shipment</th><th>Status</th><th>Manage delivery</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {visibleOrders.map((order) => (
+                  <tr className={selectedIds.has(order.id) ? "is-selected" : ""} key={order.id}>
+                    <td><input type="checkbox" checked={selectedIds.has(order.id)} onChange={() => toggleSelected(order.id)} aria-label={`Select delivery order ${order.id}`} /></td>
+                    <td>
+                      <strong>#{order.id.slice(0, 8)}</strong>
+                      <span>₹{order.amount.toLocaleString("en-IN")} · {order.items.length} lines</span>
+                      <details className="admin-row-details"><summary>View notebooks</summary><div className="delivery-order-items">{order.items.map((item, index) => <div key={`${order.id}-${item.productId}-${index}`}>{item.customArtworkUrl || item.imageUrl || products.find((product) => product.id === item.productId)?.images[0] ? <img src={item.customArtworkUrl ?? item.imageUrl ?? products.find((product) => product.id === item.productId)?.images[0] ?? ""} alt={item.name} /> : <span className="empty-thumb" />}<span>{item.quantity} × {item.name}{item.customCoverName ? ` · ${item.customCoverName}` : ""}</span></div>)}</div></details>
+                    </td>
+                    <td><strong>{order.customerName}</strong><span>{order.mobile}</span><span className="admin-record-address">{order.address}</span></td>
+                    <td><strong>{formatProvider(order.deliveryProvider)}</strong>{order.deliveryTrackingNumber ? <span>AWB: {order.deliveryTrackingNumber}</span> : <span>No AWB assigned</span>}<span>{order.paymentStatus} payment</span></td>
+                    <td><span className={`order-state-pill ${canonicalOrderStatus(order.deliveryStatus)}`}>{canonicalOrderStatus(order.deliveryStatus) === "printing" ? "Printing / Processing" : canonicalOrderStatus(order.deliveryStatus)}</span><span>{formatAdminDate(order.createdAt)}</span></td>
+                    <td className="delivery-manage-cell">
+                      <details className="admin-row-details manage-details">
+                        <summary>Update shipment</summary>
+                        <div className="delivery-card-actions">
+                          <DeliveryAssignmentForm order={order} onSaved={onDeliverySaved} />
+                          {order.deliveryProvider === "delhivery" && order.deliveryTrackingNumber ? <DelhiveryTrackingCard admin orderId={order.id} waybill={order.deliveryTrackingNumber} /> : null}
+                        </div>
+                      </details>
+                    </td>
+                    <td><button className="admin-row-delete" type="button" onClick={() => void removeOrders([order.id])} disabled={deleteBusy} aria-label={`Delete order ${order.id}`}><Trash2 size={16} /> Delete</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="admin-empty-state"><ShipWheel size={25} /><strong>No matching delivery orders</strong><span>Try another search, status, provider, or calendar range.</span></div>
+        )}
       </section>
     </section>
   );
@@ -1575,4 +1803,10 @@ function DeliveryAssignmentForm({ order, onSaved }: { order: Order; onSaved: () 
 
 function formatProvider(provider?: DeliveryProvider | null) {
   return deliveryProviders.find((option) => option.value === provider)?.label ?? "Review first";
+}
+
+function paymentGatewayLabelForAdmin(gateway?: Order["paymentGateway"]) {
+  if (gateway === "cod") return "Cash on Delivery";
+  if (gateway === "razorpay") return "Razorpay (historical)";
+  return gatewayOptions.find((option) => option.value === gateway)?.label ?? "Online payment";
 }

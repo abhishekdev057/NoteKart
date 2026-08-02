@@ -3,7 +3,7 @@ import { normalizeMobile } from "./auth";
 export type SmsResult = {
   /** true when the message was handed to a real SMS provider. */
   delivered: boolean;
-  /** Provider name or "dev" for the console fallback. */
+  /** Name of the real provider that accepted the OTP. */
   provider: string;
 };
 
@@ -66,9 +66,7 @@ async function sendViaTwilio(mobile: string, code: string): Promise<SmsResult> {
 
 /**
  * Send an OTP via the configured provider. Selection is by SMS_PROVIDER, or
- * auto-detected from whichever credentials are present. When nothing is
- * configured we fall back to logging the code to the server console so the
- * flow is fully testable in development without an SMS account.
+ * auto-detected from whichever credentials are present.
  */
 export async function sendOtpSms(mobile: string, code: string): Promise<SmsResult> {
   const provider = (process.env.SMS_PROVIDER ?? "").toLowerCase();
@@ -87,9 +85,5 @@ export async function sendOtpSms(mobile: string, code: string): Promise<SmsResul
     throw error;
   }
 
-  // Dev fallback: no provider configured.
-  console.warn(
-    `[notekart] No SMS provider configured. OTP for ${normalizeMobile(mobile)} is ${code} (dev only).`,
-  );
-  return { delivered: false, provider: "dev" };
+  throw new Error("No live SMS provider is configured.");
 }

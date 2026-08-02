@@ -78,3 +78,7 @@ export const delhiverySettingsSchema = z.object({
   pickupLocation: z.string().trim().min(1, { error: "Pickup location is required." }).max(120),
   defaultWeightGrams: z.coerce.number().int().min(1).max(50_000),
 });
+
+export const adminDeleteManySchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1).max(200),
+});
