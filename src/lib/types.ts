@@ -60,6 +60,11 @@ export type DeliveryTrackingSummary = {
   scans: DeliveryTrackingScan[];
 };
 
+export type DelhiverySettings = {
+  pickupLocation: string;
+  defaultWeightGrams: number;
+};
+
 export type Order = {
   id: string;
   customerName: string;

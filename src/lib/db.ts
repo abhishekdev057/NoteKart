@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { normalizePaymentGateway } from "./payments";
-import type { CustomRequest, Order, PaymentGateway, Product, ProductReview } from "./types";
+import type { CustomRequest, DelhiverySettings, Order, PaymentGateway, Product, ProductReview } from "./types";
 
 type SqlClient = ReturnType<typeof neon>;
 type DbRow = Record<string, unknown>;
@@ -438,6 +438,32 @@ export async function setActivePaymentGateway(paymentGateway: PaymentGateway) {
   await getSql()`
     INSERT INTO site_settings (key, value, updated_at)
     VALUES ('payment_gateway', ${paymentGateway}, now())
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+  `;
+}
+
+export async function getDelhiverySettings(): Promise<DelhiverySettings> {
+  await readyDb();
+  const rows = (await getSql()`
+    SELECT key, value
+    FROM site_settings
+    WHERE key IN ('delhivery_pickup_location', 'delhivery_default_weight_grams')
+  `) as DbRow[];
+  const settings = new Map(rows.map((row) => [String(row.key), String(row.value)]));
+  const savedWeight = Number(settings.get("delhivery_default_weight_grams"));
+  return {
+    pickupLocation: settings.get("delhivery_pickup_location")?.trim() || "NoteKart",
+    defaultWeightGrams: Number.isInteger(savedWeight) && savedWeight > 0 ? savedWeight : 500,
+  };
+}
+
+export async function setDelhiverySettings(settings: DelhiverySettings) {
+  await readyDb();
+  await getSql()`
+    INSERT INTO site_settings (key, value, updated_at)
+    VALUES
+      ('delhivery_pickup_location', ${settings.pickupLocation}, now()),
+      ('delhivery_default_weight_grams', ${String(settings.defaultWeightGrams)}, now())
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
   `;
 }

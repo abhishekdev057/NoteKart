@@ -1,4 +1,5 @@
 import type { DeliveryTrackingScan, DeliveryTrackingSummary, Order } from "./types";
+import { getDelhiverySettings } from "./db";
 
 export type DelhiveryServiceability = {
   pincode: string;
@@ -219,6 +220,8 @@ export async function createDelhiveryShipment(order: Order) {
     };
   }
 
+  const settings = await getDelhiverySettings();
+
   const shipment: Record<string, unknown> = {
     order: order.id,
     name: order.customerName,
@@ -234,7 +237,7 @@ export async function createDelhiveryShipment(order: Order) {
     total_amount: order.amount,
     cod_amount: order.paymentGateway === "cod" ? order.amount : 0,
     shipping_mode: process.env.DELHIVERY_SHIPPING_MODE || "Surface",
-    weight: Number(process.env.DELHIVERY_DEFAULT_WEIGHT_GRAMS || 500),
+    weight: settings.defaultWeightGrams,
   };
 
   if (process.env.DELHIVERY_SELLER_GST_TIN) shipment.seller_gst_tin = process.env.DELHIVERY_SELLER_GST_TIN;
@@ -243,7 +246,7 @@ export async function createDelhiveryShipment(order: Order) {
   const payload = {
     shipments: [shipment],
     pickup_location: {
-      name: process.env.DELHIVERY_PICKUP_LOCATION || "NoteKart",
+      name: settings.pickupLocation,
     },
   };
 

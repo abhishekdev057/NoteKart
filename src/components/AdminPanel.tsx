@@ -30,7 +30,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { DelhiveryTrackingCard } from "@/components/DelhiveryTrackingCard";
-import type { CustomRequest, DeliveryProvider, Order, PaymentGateway, Product } from "@/lib/types";
+import type { CustomRequest, DelhiverySettings, DeliveryProvider, Order, PaymentGateway, Product } from "@/lib/types";
 
 type AdminSection = "dashboard" | "products" | "custom-requests" | "orders" | "delivery" | "reports";
 
@@ -181,6 +181,12 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [uploadMessage, setUploadMessage] = useState("");
   const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>("cashfree");
   const [paymentGatewayMessage, setPaymentGatewayMessage] = useState("");
+  const [delhiverySettings, setDelhiverySettings] = useState<DelhiverySettings>({
+    pickupLocation: "NoteKart",
+    defaultWeightGrams: 500,
+  });
+  const [delhiverySettingsMessage, setDelhiverySettingsMessage] = useState("");
+  const [delhiverySettingsSaving, setDelhiverySettingsSaving] = useState(false);
 
   const chartData = useMemo(
     () => (analytics?.salesTrend ?? []).map((item) => ({
@@ -236,12 +242,13 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   }, []);
 
   async function loadAdminData() {
-    const [productRes, requestRes, orderRes, analyticsRes, gatewayRes] = await Promise.all([
+    const [productRes, requestRes, orderRes, analyticsRes, gatewayRes, delhiverySettingsRes] = await Promise.all([
       fetch("/api/products"),
       fetch("/api/custom-requests"),
       fetch("/api/orders"),
       fetch("/api/admin/analytics"),
       fetch("/api/admin/payment-gateway"),
+      fetch("/api/admin/delhivery-settings"),
     ]);
     setProducts((await productRes.json()).products ?? []);
     setRequests((await requestRes.json()).requests ?? []);
@@ -250,6 +257,10 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     if (gatewayRes.ok) {
       const data = await gatewayRes.json();
       setPaymentGateway(data.gateway ?? "cashfree");
+    }
+    if (delhiverySettingsRes.ok) {
+      const data = await delhiverySettingsRes.json();
+      if (data.settings) setDelhiverySettings(data.settings);
     }
   }
 
@@ -268,6 +279,29 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     }
     setPaymentGateway(data.gateway ?? gateway);
     setPaymentGatewayMessage(`${data.label ?? "Gateway"} is now active for checkout.`);
+  }
+
+  async function saveDelhiverySettings() {
+    setDelhiverySettingsSaving(true);
+    setDelhiverySettingsMessage("Saving Delhivery settings...");
+    try {
+      const response = await fetch("/api/admin/delhivery-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(delhiverySettings),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setDelhiverySettingsMessage(data.error ?? "Could not save Delhivery settings.");
+        return;
+      }
+      setDelhiverySettings(data.settings ?? delhiverySettings);
+      setDelhiverySettingsMessage("Pickup location and default parcel weight saved.");
+    } catch {
+      setDelhiverySettingsMessage("Could not connect while saving Delhivery settings.");
+    } finally {
+      setDelhiverySettingsSaving(false);
+    }
   }
 
   async function requestOtp() {
@@ -632,8 +666,13 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
         {section === "orders" ? <OrdersPanel orders={orders} products={products} /> : null}
         {section === "delivery" ? (
           <DeliveryPanel
+            delhiverySettings={delhiverySettings}
+            delhiverySettingsMessage={delhiverySettingsMessage}
+            delhiverySettingsSaving={delhiverySettingsSaving}
             orders={orders}
             products={products}
+            onDelhiverySettingsChange={setDelhiverySettings}
+            onDelhiverySettingsSave={saveDelhiverySettings}
             onDeliverySaved={loadAdminData}
           />
         ) : null}
@@ -1072,16 +1111,71 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
 }
 
 function DeliveryPanel({
+  delhiverySettings,
+  delhiverySettingsMessage,
+  delhiverySettingsSaving,
   orders,
   products,
+  onDelhiverySettingsChange,
+  onDelhiverySettingsSave,
   onDeliverySaved,
 }: {
+  delhiverySettings: DelhiverySettings;
+  delhiverySettingsMessage: string;
+  delhiverySettingsSaving: boolean;
   orders: Order[];
   products: Product[];
+  onDelhiverySettingsChange: (settings: DelhiverySettings) => void;
+  onDelhiverySettingsSave: () => Promise<void>;
   onDeliverySaved: () => Promise<void>;
 }) {
   return (
     <section className="admin-section-stack">
+      <section className="admin-panel">
+        <div className="panel-title">
+          <PackageCheck size={20} />
+          <h2>Delhivery shipment settings</h2>
+        </div>
+        <p className="delhivery-settings-note">
+          These values are used whenever NoteKart creates a new Delhivery shipment. The pickup location must exactly match your registered Delhivery warehouse name.
+        </p>
+        <div className="delhivery-settings-form">
+          <label>
+            <span>Pickup location / warehouse name</span>
+            <input
+              value={delhiverySettings.pickupLocation}
+              onChange={(event) => onDelhiverySettingsChange({
+                ...delhiverySettings,
+                pickupLocation: event.target.value,
+              })}
+              placeholder="Example: NoteKart"
+            />
+          </label>
+          <label>
+            <span>Default parcel weight (grams)</span>
+            <input
+              min={1}
+              max={50_000}
+              type="number"
+              value={delhiverySettings.defaultWeightGrams}
+              onChange={(event) => onDelhiverySettingsChange({
+                ...delhiverySettings,
+                defaultWeightGrams: Number(event.target.value),
+              })}
+            />
+          </label>
+          <button
+            className="primary-button justify-center"
+            type="button"
+            disabled={delhiverySettingsSaving}
+            onClick={onDelhiverySettingsSave}
+          >
+            {delhiverySettingsSaving ? "Saving..." : "Save Delhivery settings"}
+          </button>
+        </div>
+        {delhiverySettingsMessage ? <span className="form-status">{delhiverySettingsMessage}</span> : null}
+      </section>
+
       <section className="admin-panel">
         <div className="panel-title">
           <ShipWheel size={20} />

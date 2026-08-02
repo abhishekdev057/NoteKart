@@ -73,3 +73,8 @@ export const deliverySchema = z.object({
   deliveryStatus: z.enum(["pending", "printing", "processing", "shipped", "delivered", "cancelled"]).default("pending"),
   deliveryNotes: z.string().trim().max(2000).nullable().optional(),
 });
+
+export const delhiverySettingsSchema = z.object({
+  pickupLocation: z.string().trim().min(1, { error: "Pickup location is required." }).max(120),
+  defaultWeightGrams: z.coerce.number().int().min(1).max(50_000),
+});
