@@ -6,14 +6,20 @@ import {
   BarChart3,
   Boxes,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   Clock3,
+  CreditCard,
+  ExternalLink,
   ImagePlus,
   IndianRupee,
   LayoutDashboard,
   LockKeyhole,
+  LogOut,
   Menu,
   PackageCheck,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   RotateCcw,
@@ -32,7 +38,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { DelhiveryTrackingCard } from "@/components/DelhiveryTrackingCard";
 import type { CustomRequest, DelhiverySettings, DeliveryProvider, Order, PaymentGateway, Product } from "@/lib/types";
 
-type AdminSection = "dashboard" | "products" | "custom-requests" | "orders" | "delivery" | "reports";
+type AdminSection = "dashboard" | "products" | "custom-requests" | "orders" | "delivery" | "payments" | "reports";
 
 type Analytics = {
   productCount: number;
@@ -101,6 +107,7 @@ const adminLinks: Array<{ href: string; label: string; section: AdminSection; ic
   { href: "/admin/custom-requests", label: "Custom requests", section: "custom-requests", icon: ImagePlus },
   { href: "/admin/orders", label: "Orders", section: "orders", icon: ShoppingCart },
   { href: "/admin/delivery", label: "Delivery review", section: "delivery", icon: ShipWheel },
+  { href: "/admin/payments", label: "Payment gateway", section: "payments", icon: CreditCard },
   { href: "/admin/reports", label: "Reports", section: "reports", icon: BarChart3 },
 ];
 
@@ -171,6 +178,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [authorized, setAuthorized] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [requests, setRequests] = useState<CustomRequest[]>([]);
@@ -178,6 +186,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyProduct);
   const [editingProductId, setEditingProductId] = useState("");
+  const [productEditorOpen, setProductEditorOpen] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
   const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>("cashfree");
   const [paymentGatewayMessage, setPaymentGatewayMessage] = useState("");
@@ -470,6 +479,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     if (response.ok) {
       setForm(emptyProduct);
       setEditingProductId("");
+      setProductEditorOpen(false);
       setUploadMessage(editingProductId ? "Product updated." : "Product saved.");
       await loadAdminData();
       return;
@@ -497,6 +507,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     if (editingProductId === id) {
       setForm(emptyProduct);
       setEditingProductId("");
+      setProductEditorOpen(false);
     }
     await loadAdminData();
   }
@@ -522,6 +533,7 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   function editProduct(product: Product) {
     setForm(productToForm(product));
     setEditingProductId(product.id);
+    setProductEditorOpen(true);
     setUploadMessage(`Editing ${product.name}.`);
     requestAnimationFrame(() => {
       document.getElementById("product-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -532,6 +544,11 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
     setForm(emptyProduct);
     setEditingProductId("");
     setUploadMessage("");
+  }
+
+  function toggleProductEditor() {
+    resetProductForm();
+    setProductEditorOpen((current) => !current);
   }
 
   if (checkingSession) {
@@ -596,12 +613,33 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
   }
 
   return (
-    <main className="admin-shell">
+    <main className={`admin-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="admin-sidebar">
-        <Link href="/" className="admin-brand">
-          <LayoutDashboard size={20} /> NoteKart
-        </Link>
-        <AdminNav activeSection={section} onNavigate={() => setMenuOpen(false)} />
+        <div className="admin-sidebar-head">
+          <Link href="/admin" className="admin-brand" title="NoteKart admin">
+            <LayoutDashboard size={20} /> <span className="admin-sidebar-label">NoteKart</span>
+          </Link>
+          <button
+            className="admin-sidebar-toggle"
+            type="button"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            aria-label={sidebarCollapsed ? "Expand admin sidebar" : "Collapse admin sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+        </div>
+        <nav className="admin-sidebar-nav">
+          <AdminNav activeSection={section} onNavigate={() => setMenuOpen(false)} />
+        </nav>
+        <div className="admin-sidebar-footer">
+          <Link href="/" className="admin-storefront-link" title="Open storefront">
+            <ExternalLink size={16} /> <span className="admin-sidebar-label">Open storefront</span>
+          </Link>
+          <button className="admin-logout-button" type="button" onClick={logout} title="Logout">
+            <LogOut size={17} /> <span className="admin-sidebar-label">Logout</span>
+          </button>
+        </div>
       </aside>
 
       <section className="admin-main">
@@ -610,11 +648,15 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
             {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
           <strong>{sectionTitle(section)}</strong>
-          <button className="secondary-button" onClick={logout}>Logout</button>
+          <span className="admin-mobile-bar-spacer" />
         </div>
         {menuOpen ? (
           <nav className="admin-mobile-menu">
             <AdminNav activeSection={section} onNavigate={() => setMenuOpen(false)} />
+            <div className="admin-mobile-menu-footer">
+              <Link href="/" onClick={() => setMenuOpen(false)}><ExternalLink size={16} /> Open storefront</Link>
+              <button type="button" onClick={logout}><LogOut size={17} /> Logout</button>
+            </div>
           </nav>
         ) : null}
 
@@ -623,10 +665,6 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
             <p>Admin console</p>
             <h1>{adminHeadline(section)}</h1>
           </div>
-          <div className="admin-top-actions">
-            <Link href="/" className="secondary-button">Open storefront</Link>
-            <button className="secondary-button admin-desktop-only" onClick={logout}>Logout</button>
-          </div>
         </div>
 
         {section === "dashboard" ? (
@@ -634,18 +672,20 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
             analytics={analytics}
             orders={orders}
             requests={requests}
-            paymentGateway={paymentGateway}
-            paymentGatewayMessage={paymentGatewayMessage}
-            onPaymentGatewayChange={savePaymentGateway}
           />
         ) : null}
         {section === "reports" ? (
           <Reports
             chartData={chartData}
             analytics={analytics}
+          />
+        ) : null}
+        {section === "payments" ? (
+          <PaymentGatewayPage
+            orders={orders}
             paymentGateway={paymentGateway}
-            paymentGatewayMessage={paymentGatewayMessage}
-            onPaymentGatewayChange={savePaymentGateway}
+            message={paymentGatewayMessage}
+            onChange={savePaymentGateway}
           />
         ) : null}
         {section === "products" ? (
@@ -654,11 +694,13 @@ export function AdminPanel({ section = "dashboard" }: AdminPanelProps) {
             products={products}
             uploadMessage={uploadMessage}
             editingProductId={editingProductId}
+            editorOpen={productEditorOpen}
             onDeleteProduct={deleteProduct}
             onEditProduct={editProduct}
             onFormChange={setForm}
             onResetForm={resetProductForm}
             onSaveProduct={saveProduct}
+            onToggleEditor={toggleProductEditor}
             onUploadProductImage={uploadProductImage}
           />
         ) : null}
@@ -685,8 +727,8 @@ function AdminNav({ activeSection, onNavigate }: { activeSection: AdminSection; 
   return (
     <>
       {adminLinks.map(({ href, label, section, icon: Icon }) => (
-        <Link className={activeSection === section ? "active" : ""} href={href} key={href} onClick={onNavigate}>
-          <Icon size={18} /> {label}
+        <Link className={activeSection === section ? "active" : ""} href={href} key={href} onClick={onNavigate} title={label}>
+          <Icon size={18} /> <span className="admin-sidebar-label">{label}</span>
         </Link>
       ))}
     </>
@@ -700,6 +742,7 @@ function adminHeadline(section: AdminSection) {
     "custom-requests": "Custom notebook artwork requests",
     orders: "Paid orders and customer details",
     delivery: "Review each order and assign delivery",
+    payments: "Choose a gateway and review transactions",
     reports: "Reports, revenue and operational analysis",
   };
   return titles[section];
@@ -728,16 +771,10 @@ function Dashboard({
   analytics,
   orders,
   requests,
-  paymentGateway,
-  paymentGatewayMessage,
-  onPaymentGatewayChange,
 }: {
   analytics: Analytics | null;
   orders: Order[];
   requests: CustomRequest[];
-  paymentGateway: PaymentGateway;
-  paymentGatewayMessage: string;
-  onPaymentGatewayChange: (gateway: PaymentGateway) => Promise<void>;
 }) {
   const pendingDelivery = orders.filter((order) => order.deliveryProvider === "review").length;
   return (
@@ -788,11 +825,6 @@ function Dashboard({
           <Link className="primary-button justify-center" href="/admin/delivery">Open delivery review</Link>
         </div>
       </section>
-      <PaymentGatewayPanel
-        paymentGateway={paymentGateway}
-        message={paymentGatewayMessage}
-        onChange={onPaymentGatewayChange}
-      />
     </section>
   );
 }
@@ -800,15 +832,9 @@ function Dashboard({
 function Reports({
   chartData,
   analytics,
-  paymentGateway,
-  paymentGatewayMessage,
-  onPaymentGatewayChange,
 }: {
   chartData: Array<{ name: string; value: number }>;
   analytics: Analytics | null;
-  paymentGateway: PaymentGateway;
-  paymentGatewayMessage: string;
-  onPaymentGatewayChange: (gateway: PaymentGateway) => Promise<void>;
 }) {
   return (
     <section className="admin-section-stack">
@@ -850,44 +876,210 @@ function Reports({
           </ResponsiveContainer>
         </div>
       </section>
-      <PaymentGatewayPanel
-        paymentGateway={paymentGateway}
-        message={paymentGatewayMessage}
-        onChange={onPaymentGatewayChange}
-      />
     </section>
   );
 }
 
-function PaymentGatewayPanel({
+type DatePreset = "all" | "today" | "yesterday" | "last7" | "last30" | "custom";
+type DateFilterValue = { preset: DatePreset; from: string; to: string };
+
+const emptyDateFilter: DateFilterValue = { preset: "all", from: "", to: "" };
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dateMatches(value: string | undefined, filter: DateFilterValue) {
+  if (filter.preset === "all") return true;
+  if (!value) return false;
+  const itemDate = new Date(value);
+  if (Number.isNaN(itemDate.getTime())) return false;
+  const today = startOfLocalDay(new Date());
+  let from: Date | null = null;
+  let to: Date | null = null;
+
+  if (filter.preset === "today") {
+    from = today;
+    to = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  } else if (filter.preset === "yesterday") {
+    from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    to = today;
+  } else if (filter.preset === "last7" || filter.preset === "last30") {
+    const days = filter.preset === "last7" ? 7 : 30;
+    from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - days + 1);
+    to = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  } else {
+    from = filter.from ? new Date(`${filter.from}T00:00:00`) : null;
+    to = filter.to ? new Date(`${filter.to}T23:59:59.999`) : null;
+  }
+
+  return (!from || itemDate >= from) && (!to || itemDate <= to);
+}
+
+function formatAdminDate(value?: string) {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function DateFilterBar({ value, onChange }: { value: DateFilterValue; onChange: (value: DateFilterValue) => void }) {
+  return (
+    <div className="admin-date-filters">
+      <label>
+        <span><CalendarRange size={14} /> Date range</span>
+        <select
+          value={value.preset}
+          onChange={(event) => onChange({ ...value, preset: event.target.value as DatePreset })}
+        >
+          <option value="all">All dates</option>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="last7">Last 7 days</option>
+          <option value="last30">Last 30 days</option>
+          <option value="custom">Custom calendar</option>
+        </select>
+      </label>
+      <label>
+        <span>From</span>
+        <input
+          type="date"
+          value={value.from}
+          onChange={(event) => onChange({ ...value, preset: "custom", from: event.target.value })}
+        />
+      </label>
+      <label>
+        <span>To</span>
+        <input
+          type="date"
+          value={value.to}
+          onChange={(event) => onChange({ ...value, preset: "custom", to: event.target.value })}
+        />
+      </label>
+      <button type="button" onClick={() => onChange(emptyDateFilter)} disabled={value.preset === "all" && !value.from && !value.to}>
+        Clear dates
+      </button>
+    </div>
+  );
+}
+
+type PaymentStateFilter = "all" | "successful" | "pending" | "failed";
+
+function paymentState(status: string): Exclude<PaymentStateFilter, "all"> {
+  const value = status.toLowerCase();
+  if (value === "paid") return "successful";
+  if (["failed", "cancelled", "amount_mismatch"].includes(value)) return "failed";
+  return "pending";
+}
+
+function PaymentGatewayPage({
+  orders,
   paymentGateway,
   message,
   onChange,
 }: {
+  orders: Order[];
   paymentGateway: PaymentGateway;
   message: string;
   onChange: (gateway: PaymentGateway) => Promise<void>;
 }) {
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(emptyDateFilter);
+  const [statusFilter, setStatusFilter] = useState<PaymentStateFilter>("all");
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const gatewayTransactions = orders.filter((order) => order.paymentGateway === paymentGateway);
+  const visibleTransactions = gatewayTransactions.filter((order) => {
+    const matchesStatus = statusFilter === "all" || paymentState(order.paymentStatus) === statusFilter;
+    const matchesDate = dateMatches(order.createdAt, dateFilter);
+    const matchesQuery = !normalizedQuery || [order.id, order.customerName, order.mobile, order.paymentReference ?? ""]
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+    return matchesStatus && matchesDate && matchesQuery;
+  });
+  const successful = visibleTransactions.filter((order) => paymentState(order.paymentStatus) === "successful");
+  const pending = visibleTransactions.filter((order) => paymentState(order.paymentStatus) === "pending");
+  const failed = visibleTransactions.filter((order) => paymentState(order.paymentStatus) === "failed");
+  const activeGateway = gatewayOptions.find((option) => option.value === paymentGateway);
+
   return (
-    <section className="admin-panel">
-      <div className="panel-title">
-        <Smartphone size={20} />
-        <h2>Payment gateway</h2>
-      </div>
-      <div className="gateway-grid">
-        {gatewayOptions.map((option) => (
-          <button
-            className={`gateway-option ${paymentGateway === option.value ? "active" : ""}`}
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-          >
-            <strong>{option.label}</strong>
-            <span>{option.note}</span>
-          </button>
-        ))}
-      </div>
-      {message ? <span className="form-status">{message}</span> : null}
+    <section className="admin-section-stack">
+      <section className="admin-panel payment-control-panel">
+        <div className="panel-title">
+          <CreditCard size={20} />
+          <h2>Payment gateway control</h2>
+        </div>
+        <div className="payment-gateway-control">
+          <div className="payment-active-card">
+            <span>Currently active</span>
+            <strong>{activeGateway?.label ?? paymentGateway}</strong>
+            <p>{activeGateway?.note}</p>
+          </div>
+          <label>
+            <span>Choose active gateway</span>
+            <select value={paymentGateway} onChange={(event) => void onChange(event.target.value as PaymentGateway)}>
+              {gatewayOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+        {message ? <span className="form-status">{message}</span> : null}
+      </section>
+
+      <section className="admin-panel">
+        <div className="panel-title payment-title-row">
+          <Smartphone size={20} />
+          <div>
+            <h2>{activeGateway?.label} transactions</h2>
+            <span>Only real orders recorded against the active gateway are shown.</span>
+          </div>
+        </div>
+        <div className="payment-summary-grid">
+          <div><span>Filtered transactions</span><strong>{visibleTransactions.length}</strong></div>
+          <div className="success"><span>Successful value</span><strong>₹{successful.reduce((sum, order) => sum + order.amount, 0).toLocaleString("en-IN")}</strong></div>
+          <div className="pending"><span>Pending</span><strong>{pending.length}</strong></div>
+          <div className="failed"><span>Failed</span><strong>{failed.length}</strong></div>
+        </div>
+        <div className="admin-filter-shell">
+          <label className="admin-order-search">
+            <Search size={18} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search transaction, order, customer or mobile" />
+            {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear transaction search"><X size={16} /></button> : null}
+          </label>
+          <label className="admin-select-filter">
+            <span>Payment status</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PaymentStateFilter)}>
+              <option value="all">All statuses</option>
+              <option value="successful">Successful</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </label>
+          <DateFilterBar value={dateFilter} onChange={setDateFilter} />
+        </div>
+        <div className="payment-transactions-list">
+          {visibleTransactions.map((order) => (
+            <article className="payment-transaction-card" key={order.id}>
+              <div className="payment-transaction-main">
+                <span className={`payment-state-pill ${paymentState(order.paymentStatus)}`}>{paymentState(order.paymentStatus)}</span>
+                <strong>₹{order.amount.toLocaleString("en-IN")}</strong>
+                <span>{order.customerName} · {order.mobile}</span>
+              </div>
+              <div>
+                <strong>{order.paymentReference ?? order.phonepePaymentId ?? `Order ${order.id.slice(0, 8)}`}</strong>
+                <span>Order #{order.id}</span>
+                <span>{formatAdminDate(order.createdAt)}</span>
+              </div>
+            </article>
+          ))}
+          {!visibleTransactions.length ? (
+            <div className="admin-empty-state"><CreditCard size={25} /><strong>No matching transactions</strong><span>Change the date, payment status, search, or active gateway.</span></div>
+          ) : null}
+        </div>
+      </section>
     </section>
   );
 }
@@ -897,30 +1089,42 @@ function ProductsPanel({
   products,
   uploadMessage,
   editingProductId,
+  editorOpen,
   onDeleteProduct,
   onEditProduct,
   onFormChange,
   onResetForm,
   onSaveProduct,
+  onToggleEditor,
   onUploadProductImage,
 }: {
   form: ProductForm;
   products: Product[];
   uploadMessage: string;
   editingProductId: string;
+  editorOpen: boolean;
   onDeleteProduct: (id: string) => Promise<void>;
   onEditProduct: (product: Product) => void;
   onFormChange: (form: ProductForm) => void;
   onResetForm: () => void;
   onSaveProduct: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onToggleEditor: () => void;
   onUploadProductImage: (file: File) => Promise<void>;
 }) {
   return (
     <section className="admin-panel" id="product-editor">
-      <div className="panel-title">
-        <PackageCheck size={20} />
-        <h2>Product and category management</h2>
+      <div className="panel-title panel-title-actions">
+        <div>
+          <PackageCheck size={20} />
+          <h2>Products</h2>
+        </div>
+        <button className={editorOpen ? "secondary-button" : "primary-button"} type="button" onClick={onToggleEditor}>
+          {editorOpen ? <X size={17} /> : <Plus size={17} />}
+          {editorOpen ? "Close manager" : "Product & category management"}
+        </button>
       </div>
+      {editorOpen ? (
+        <>
       <div className="admin-form-head">
         <div>
           <strong>{editingProductId ? "Edit product" : "Add new product"}</strong>
@@ -993,6 +1197,8 @@ function ProductsPanel({
         </div>
         {uploadMessage ? <span className="form-status">{uploadMessage}</span> : null}
       </form>
+        </>
+      ) : null}
 
       <div className="admin-table">
         {products.map((product) => (
@@ -1015,23 +1221,56 @@ function ProductsPanel({
 }
 
 function CustomRequestsPanel({ requests }: { requests: CustomRequest[] }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(emptyDateFilter);
+  const normalizedQuery = query.trim().toLowerCase();
+  const statuses = Array.from(new Set(requests.map((request) => request.status))).sort();
+  const visibleRequests = requests.filter((request) => {
+    const matchesStatus = statusFilter === "all" || request.status === statusFilter;
+    const matchesDate = dateMatches(request.createdAt, dateFilter);
+    const matchesQuery = !normalizedQuery || [request.id, request.customerName, request.mobile, request.notes]
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+    return matchesStatus && matchesDate && matchesQuery;
+  });
+
   return (
     <section className="admin-panel">
       <div className="panel-title">
         <ImagePlus size={20} />
         <h2>Custom notebook requests</h2>
       </div>
+      <div className="admin-filter-shell">
+        <label className="admin-order-search">
+          <Search size={18} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, mobile, request ID or notes" />
+          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear custom request search"><X size={16} /></button> : null}
+        </label>
+        <label className="admin-select-filter">
+          <span>Request status</span>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">All statuses</option>
+            {statuses.map((status) => <option value={status} key={status}>{status}</option>)}
+          </select>
+        </label>
+        <DateFilterBar value={dateFilter} onChange={setDateFilter} />
+      </div>
+      <div className="admin-filter-result"><strong>{visibleRequests.length}</strong> of {requests.length} requests shown</div>
       <div className="admin-table">
-        {requests.map((request) => (
+        {visibleRequests.map((request) => (
           <div className="admin-row" key={request.id}>
             {request.imageUrl ? <img src={request.imageUrl} alt={request.customerName} /> : <span className="empty-thumb" />}
             <div>
               <strong>{request.customerName} · {request.mobile}</strong>
               <span>{request.quantity} pcs · {request.notes}</span>
+              <span>{request.status} · {formatAdminDate(request.createdAt)}</span>
             </div>
             <CheckCircle2 size={20} />
           </div>
         ))}
+        {!visibleRequests.length ? (
+          <div className="admin-empty-state"><ImagePlus size={25} /><strong>No matching custom requests</strong><span>Try another search, status, or calendar range.</span></div>
+        ) : null}
       </div>
     </section>
   );
@@ -1040,12 +1279,16 @@ function CustomRequestsPanel({ requests }: { requests: CustomRequest[] }) {
 function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[] }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CanonicalOrderStatus>("all");
+  const [gatewayFilter, setGatewayFilter] = useState<"all" | Order["paymentGateway"]>("all");
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(emptyDateFilter);
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOrders = orders.filter((order) => {
     const matchesStatus = statusFilter === "all" || canonicalOrderStatus(order.deliveryStatus) === statusFilter;
+    const matchesGateway = gatewayFilter === "all" || order.paymentGateway === gatewayFilter;
+    const matchesDate = dateMatches(order.createdAt, dateFilter);
     const matchesQuery = !normalizedQuery || [order.id, order.mobile, order.customerName]
       .some((value) => value.toLowerCase().includes(normalizedQuery));
-    return matchesStatus && matchesQuery;
+    return matchesStatus && matchesGateway && matchesDate && matchesQuery;
   });
 
   return (
@@ -1059,6 +1302,17 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by Order ID, mobile number or customer name" />
         {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X size={17} /></button> : null}
       </label>
+      <div className="admin-filter-shell compact">
+        <label className="admin-select-filter">
+          <span>Payment method</span>
+          <select value={gatewayFilter ?? "all"} onChange={(event) => setGatewayFilter(event.target.value as "all" | Order["paymentGateway"])}>
+            <option value="all">All payment methods</option>
+            <option value="cod">Cash on Delivery</option>
+            {gatewayOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <DateFilterBar value={dateFilter} onChange={setDateFilter} />
+      </div>
       <div className="order-filter-row">
         <button className={statusFilter === "all" ? "active" : ""} type="button" onClick={() => setStatusFilter("all")}>All <strong>{orders.length}</strong></button>
         {orderStatusMeta.map(({ value, label }) => (
@@ -1067,6 +1321,7 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
           </button>
         ))}
       </div>
+      <div className="admin-filter-result"><strong>{visibleOrders.length}</strong> of {orders.length} orders shown</div>
       <div className="admin-orders-list">
         {visibleOrders.map((order) => (
           <article className="admin-order-card" key={order.id}>
@@ -1075,6 +1330,7 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
                 <span className={`order-state-pill ${canonicalOrderStatus(order.deliveryStatus)}`}>{canonicalOrderStatus(order.deliveryStatus) === "printing" ? "Printing / Processing" : canonicalOrderStatus(order.deliveryStatus)}</span>
                 <strong>{order.customerName} · ₹{order.amount.toLocaleString("en-IN")}</strong>
                 <span>Order #{order.id}</span>
+                <span>{formatAdminDate(order.createdAt)}</span>
               </div>
               <div className="admin-order-contact">
                 <strong>{order.mobile}</strong>
@@ -1103,7 +1359,7 @@ function OrdersPanel({ orders, products }: { orders: Order[]; products: Product[
           </article>
         ))}
         {!visibleOrders.length ? (
-          <div className="admin-empty-state"><Search size={25} /><strong>No matching orders</strong><span>Try another Order ID, mobile number, customer name or status.</span></div>
+          <div className="admin-empty-state"><Search size={25} /><strong>No matching orders</strong><span>Try another search, status, payment method, or calendar range.</span></div>
         ) : null}
       </div>
     </section>
@@ -1129,6 +1385,25 @@ function DeliveryPanel({
   onDelhiverySettingsSave: () => Promise<void>;
   onDeliverySaved: () => Promise<void>;
 }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | CanonicalOrderStatus>("all");
+  const [providerFilter, setProviderFilter] = useState<"all" | DeliveryProvider>("all");
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(emptyDateFilter);
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOrders = orders.filter((order) => {
+    const matchesStatus = statusFilter === "all" || canonicalOrderStatus(order.deliveryStatus) === statusFilter;
+    const matchesProvider = providerFilter === "all" || order.deliveryProvider === providerFilter;
+    const matchesDate = dateMatches(order.createdAt, dateFilter);
+    const matchesQuery = !normalizedQuery || [
+      order.id,
+      order.customerName,
+      order.mobile,
+      order.address,
+      order.deliveryTrackingNumber ?? "",
+    ].some((value) => value.toLowerCase().includes(normalizedQuery));
+    return matchesStatus && matchesProvider && matchesDate && matchesQuery;
+  });
+
   return (
     <section className="admin-section-stack">
       <section className="admin-panel">
@@ -1181,14 +1456,40 @@ function DeliveryPanel({
           <ShipWheel size={20} />
           <h2>Delivery assignment</h2>
         </div>
+        <div className="admin-filter-shell">
+          <label className="admin-order-search">
+            <Search size={18} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search order, customer, mobile, address or AWB" />
+            {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear delivery search"><X size={16} /></button> : null}
+          </label>
+          <div className="admin-filter-selects">
+            <label className="admin-select-filter">
+              <span>Delivery status</span>
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | CanonicalOrderStatus)}>
+                <option value="all">All statuses</option>
+                {orderStatusMeta.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label className="admin-select-filter">
+              <span>Courier provider</span>
+              <select value={providerFilter} onChange={(event) => setProviderFilter(event.target.value as "all" | DeliveryProvider)}>
+                <option value="all">All providers</option>
+                {deliveryProviders.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <DateFilterBar value={dateFilter} onChange={setDateFilter} />
+        </div>
+        <div className="admin-filter-result"><strong>{visibleOrders.length}</strong> of {orders.length} delivery orders shown</div>
         <div className="admin-table">
-          {orders.map((order) => (
+          {visibleOrders.map((order) => (
             <div className="delivery-card" key={order.id}>
               <div>
                 <strong>{order.customerName} · ₹{order.amount}</strong>
                 <span>{order.mobile}</span>
                 <span>{order.address}</span>
                 <span>{order.paymentStatus} payment · {order.items.length} item lines</span>
+                <span>{formatAdminDate(order.createdAt)}</span>
                 <div className="delivery-order-items">
                   {order.items.map((item, index) => (
                     <div key={`${order.id}-${item.productId}-${index}`}>
@@ -1212,6 +1513,9 @@ function DeliveryPanel({
               </div>
             </div>
           ))}
+          {!visibleOrders.length ? (
+            <div className="admin-empty-state"><ShipWheel size={25} /><strong>No matching delivery orders</strong><span>Try another search, status, provider, or calendar range.</span></div>
+          ) : null}
         </div>
       </section>
     </section>
